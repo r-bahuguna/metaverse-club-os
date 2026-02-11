@@ -1,0 +1,218 @@
+/* ==========================================================================
+   Animation Keyframes — Cyber Command Center
+   ========================================================================== */
+
+/* ── Pulse (Online Indicators) ── */
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.6;
+        transform: scale(1.15);
+    }
+}
+
+.pulse {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+/* ── Neon Glow Pulse ── */
+@keyframes glow-pulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
+    }
+
+    50% {
+        box-shadow: 0 0 20px rgba(0, 240, 255, 0.4),
+            0 0 40px rgba(0, 240, 255, 0.1);
+    }
+}
+
+.glow-pulse {
+    animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* ── Shimmer (Skeleton Loading) ── */
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.skeleton {
+    background: linear-gradient(90deg,
+            rgba(255, 255, 255, 0.04) 25%,
+            rgba(255, 255, 255, 0.08) 50%,
+            rgba(255, 255, 255, 0.04) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+}
+
+/* ── Fade In Up ── */
+@keyframes fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in-up {
+    animation: fade-in-up var(--duration-slow) var(--ease-out) both;
+}
+
+/* Staggered children */
+.stagger-children>* {
+    animation: fade-in-up var(--duration-slow) var(--ease-out) both;
+}
+
+.stagger-children>*:nth-child(1) {
+    animation-delay: 0ms;
+}
+
+.stagger-children>*:nth-child(2) {
+    animation-delay: 60ms;
+}
+
+.stagger-children>*:nth-child(3) {
+    animation-delay: 120ms;
+}
+
+.stagger-children>*:nth-child(4) {
+    animation-delay: 180ms;
+}
+
+.stagger-children>*:nth-child(5) {
+    animation-delay: 240ms;
+}
+
+.stagger-children>*:nth-child(6) {
+    animation-delay: 300ms;
+}
+
+/* ── Slide In Left (Sidebar) ── */
+@keyframes slide-in-left {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.slide-in-left {
+    animation: slide-in-left var(--duration-normal) var(--ease-out) both;
+}
+
+/* ── Scale In (Modals, Dropdowns) ── */
+@keyframes scale-in {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.scale-in {
+    animation: scale-in var(--duration-normal) var(--ease-spring) both;
+}
+
+/* ── Ticker Scroll ── */
+@keyframes ticker-scroll {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+.ticker {
+    animation: ticker-scroll 30s linear infinite;
+}
+
+/* ── Floating (Subtle hover state) ── */
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-4px);
+    }
+}
+
+.float {
+    animation: float 3s ease-in-out infinite;
+}
+
+/* ── Noise Overlay ── */
+@keyframes noise {
+
+    0%,
+    100% {
+        transform: translate(0, 0);
+    }
+
+    10% {
+        transform: translate(-5%, -5%);
+    }
+
+    20% {
+        transform: translate(-10%, 5%);
+    }
+
+    30% {
+        transform: translate(5%, -10%);
+    }
+
+    40% {
+        transform: translate(-5%, 15%);
+    }
+
+    50% {
+        transform: translate(-10%, 5%);
+    }
+
+    60% {
+        transform: translate(15%, 0);
+    }
+
+    70% {
+        transform: translate(0, 10%);
+    }
+
+    80% {
+        transform: translate(-15%, 0);
+    }
+
+    90% {
+        transform: translate(10%, 5%);
+    }
+}

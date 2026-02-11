@@ -1,0 +1,73 @@
+/* GlassCard Component Styles */
+.glassCard {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    transition: all var(--duration-normal) var(--ease-out);
+    position: relative;
+    overflow: hidden;
+}
+
+.glassCard::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg,
+            rgba(255, 255, 255, 0.08) 0%,
+            transparent 50%,
+            transparent 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+.interactive:hover {
+    background: var(--glass-bg-hover);
+    border-color: var(--glass-border-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Neon rim variants */
+.neonCyan {
+    border-color: rgba(0, 240, 255, 0.12);
+}
+
+.neonCyan:hover {
+    border-color: rgba(0, 240, 255, 0.3);
+    box-shadow: var(--neon-cyan-glow);
+}
+
+.neonPurple {
+    border-color: rgba(192, 132, 252, 0.12);
+}
+
+.neonPurple:hover {
+    border-color: rgba(192, 132, 252, 0.3);
+    box-shadow: var(--neon-purple-glow);
+}
+
+.neonPink {
+    border-color: rgba(255, 107, 157, 0.12);
+}
+
+.neonPink:hover {
+    border-color: rgba(255, 107, 157, 0.3);
+    box-shadow: var(--neon-pink-glow);
+}
+
+.neonGreen {
+    border-color: rgba(74, 222, 128, 0.12);
+}
+
+.neonGreen:hover {
+    border-color: rgba(74, 222, 128, 0.3);
+    box-shadow: var(--neon-green-glow);
+}

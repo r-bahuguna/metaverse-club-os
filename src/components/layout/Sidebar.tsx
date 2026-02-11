@@ -1,0 +1,184 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import {
+    LayoutDashboard, CalendarDays, Users, BarChart3,
+    PartyPopper, Settings, Zap, ChevronLeft,
+} from 'lucide-react';
+import { useRole } from '@/hooks/useRole';
+import { NAV_ITEMS, ROLE_CONFIG, BRAND, DISCORD } from '@/lib/constants';
+import styles from './Sidebar.module.css';
+
+const iconMap: Record<string, React.ReactNode> = {
+    LayoutDashboard: <LayoutDashboard size={20} />,
+    CalendarDays: <CalendarDays size={20} />,
+    Users: <Users size={20} />,
+    BarChart3: <BarChart3 size={20} />,
+    PartyPopper: <PartyPopper size={20} />,
+    Settings: <Settings size={20} />,
+};
+
+/* Discord logo SVG */
+function DiscordIcon({ size = 20 }: { size?: number }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.947 2.418-2.157 2.418z" />
+        </svg>
+    );
+}
+
+interface SidebarProps {
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+    const pathname = usePathname();
+    const { currentUser, currentRole } = useRole();
+    const roleConfig = ROLE_CONFIG[currentRole];
+
+    const [collapsed, setCollapsed] = useState(false);
+
+    /* Persist collapse state */
+    useEffect(() => {
+        const saved = localStorage.getItem('sidebar-collapsed');
+        if (saved === 'true') setCollapsed(true);
+    }, []);
+
+    function toggleCollapse() {
+        setCollapsed(prev => {
+            localStorage.setItem('sidebar-collapsed', String(!prev));
+            return !prev;
+        });
+    }
+
+    const filteredNav = NAV_ITEMS.filter(item =>
+        item.requiredRoles.includes(currentRole)
+    );
+
+    return (
+        <>
+            {/* Mobile overlay */}
+            {isOpen && (
+                <div className={styles.overlay} onClick={onClose} />
+            )}
+
+            <aside className={`${styles.sidebar} ${isOpen ? styles.sidebarOpen : ''} ${collapsed ? styles.sidebarCollapsed : ''}`}>
+                {/* Floating particles */}
+                <div className={styles.particles}>
+                    <div className={styles.particle} />
+                    <div className={styles.particle} />
+                    <div className={styles.particle} />
+                </div>
+
+                {/* Collapse toggle */}
+                <button
+                    className={styles.collapseBtn}
+                    onClick={toggleCollapse}
+                    aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                    <ChevronLeft size={14} />
+                </button>
+
+                {/* Brand */}
+                <div className={styles.brand}>
+                    <div className={styles.brandIcon}>
+                        <Zap size={18} color="#fff" />
+                    </div>
+                    <div className={styles.brandText}>
+                        <span className={styles.brandName}>{BRAND.name}</span>
+                        <span className={styles.brandSub}>{BRAND.tagline}</span>
+                    </div>
+                </div>
+
+                {/* Navigation — colored icons */}
+                <nav className={styles.nav}>
+                    {filteredNav.map(item => {
+                        const isActive = item.href === '/dashboard'
+                            ? pathname === '/dashboard'
+                            : pathname?.startsWith(item.href);
+
+                        return (
+                            <Link
+                                key={item.id}
+                                href={item.href}
+                                className={`${styles.navItem} ${isActive ? styles.navItemActive : ''}`}
+                                onClick={onClose}
+                                style={isActive ? {
+                                    color: item.neonColor,
+                                    ['--active-color' as string]: item.neonColor,
+                                } : undefined}
+                            >
+                                <span
+                                    className={styles.navIcon}
+                                    style={{ color: isActive ? item.neonColor : undefined }}
+                                >
+                                    {iconMap[item.icon] || <LayoutDashboard size={20} />}
+                                </span>
+                                <span className={styles.navLabel}>{item.label}</span>
+                                {/* Active indicator bar uses item color */}
+                                {isActive && (
+                                    <span
+                                        style={{
+                                            position: 'absolute',
+                                            left: 0,
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            width: 3,
+                                            height: 20,
+                                            borderRadius: '0 3px 3px 0',
+                                            background: item.neonColor,
+                                            boxShadow: `0 0 8px ${item.neonColor}`,
+                                        }}
+                                    />
+                                )}
+                            </Link>
+                        );
+                    })}
+                </nav>
+
+                {/* Discord Widget */}
+                <div className={styles.discordSection}>
+                    {collapsed ? (
+                        <div className={styles.discordCollapsed}>
+                            <a
+                                href={`https://discord.gg/invite`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={styles.discordIconBtn}
+                                title="Discord"
+                            >
+                                <DiscordIcon size={18} />
+                            </a>
+                        </div>
+                    ) : (
+                        <div className={styles.discordExpanded}>
+                            <iframe
+                                src={`${DISCORD.widgetUrl}`}
+                                title="Discord Widget"
+                                sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
+                                loading="lazy"
+                            />
+                            <div className={styles.discordGlassOverlay} />
+                        </div>
+                    )}
+                </div>
+
+                {/* User */}
+                <div className={styles.userSection}>
+                    <div className={styles.userCard}>
+                        <div className={styles.avatar}>
+                            {currentUser.displayName.charAt(0)}
+                        </div>
+                        <div className={styles.userInfo}>
+                            <div className={styles.userName}>{currentUser.displayName}</div>
+                            <div className={styles.userRole}>{roleConfig.label}</div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </>
+    );
+}
