@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { RoleProvider } from '@/hooks/useRole';
 import { SettingsProvider } from '@/hooks/useSettings';
@@ -39,8 +39,14 @@ export default function DashboardLayout({
     const { user, loading } = useAuth();
     const router = useRouter();
 
-    /* Auth guard */
-    if (loading) {
+    /* Auth guard — redirect in useEffect to avoid setState-during-render */
+    useEffect(() => {
+        if (!loading && !user) {
+            router.push('/login');
+        }
+    }, [user, loading, router]);
+
+    if (loading || !user) {
         return (
             <div style={{
                 minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -55,11 +61,6 @@ export default function DashboardLayout({
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
         );
-    }
-
-    if (!user) {
-        router.push('/login');
-        return null;
     }
 
     return (
