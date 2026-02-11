@@ -223,10 +223,12 @@ export const MOCK_TIP_HISTORY = [
 /** ── DJ Booth & Host Station ── */
 export const MOCK_DJ_BOOTH: DjBoothData = {
     djName: 'DJ Alexa',
+    slUsername: '3ntropyRahul',
     genre: 'Techno / House',
     currentTrack: '"Neon Drift" – Synthwave',
     tipsThisSession: 4200,
     isLive: true,
+    streamUrl: 'http://sin.lightmanstreams.com:10040',
 };
 
 export const MOCK_HOST_STATION: HostStationData = {

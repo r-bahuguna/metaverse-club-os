@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     AreaChart, Area, XAxis, YAxis, Tooltip,
     ResponsiveContainer, CartesianGrid,
@@ -8,6 +8,7 @@ import {
 import {
     Headphones, Mic, Users, Clock,
     UserPlus, Activity,
+    Play, Pause, Volume2,
 } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import GlassCard from '@/components/ui/GlassCard';
@@ -97,6 +98,43 @@ export default function DashboardPage() {
     const capacityPct = Math.round((stats.currentGuests / stats.maxCapacity) * 100);
     const capacityColor = capacityPct > 85 ? '#ff4444' : capacityPct > 60 ? '#fbbf24' : '#4ade80';
 
+    /* ── Stream Player State ── */
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [isStreaming, setIsStreaming] = useState(false);
+    const [volume, setVolume] = useState(0.7);
+
+    function toggleStream() {
+        if (!audioRef.current) {
+            audioRef.current = new Audio(dj.streamUrl);
+            audioRef.current.volume = volume;
+        }
+        if (isStreaming) {
+            audioRef.current.pause();
+            audioRef.current.src = '';
+            audioRef.current = null;
+            setIsStreaming(false);
+        } else {
+            audioRef.current.src = dj.streamUrl;
+            audioRef.current.play().catch(() => { });
+            setIsStreaming(true);
+        }
+    }
+
+    function handleVolume(v: number) {
+        setVolume(v);
+        if (audioRef.current) audioRef.current.volume = v;
+    }
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.src = '';
+            }
+        };
+    }, []);
+
     return (
         <div className={styles.dashboard}>
             {/* ═══ LIVE FLOOR — DJ Booth + Host Station ═══ */}
@@ -130,6 +168,46 @@ export default function DashboardPage() {
                                 style={{ height: `${h}%` }}
                             />
                         ))}
+                    </div>
+                    {/* Stream Player */}
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 12px', borderRadius: 8,
+                        background: isStreaming ? 'rgba(0, 240, 255, 0.06)' : 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${isStreaming ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255,255,255,0.04)'}`,
+                        margin: '8px 0 4px',
+                        transition: 'all 0.3s ease',
+                    }}>
+                        <button
+                            onClick={toggleStream}
+                            style={{
+                                width: 32, height: 32, borderRadius: '50%',
+                                background: isStreaming
+                                    ? 'linear-gradient(135deg, #00f0ff, #c084fc)'
+                                    : 'rgba(255,255,255,0.06)',
+                                border: 'none', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.2s ease',
+                                boxShadow: isStreaming ? '0 0 12px rgba(0, 240, 255, 0.3)' : 'none',
+                            }}
+                        >
+                            {isStreaming ? <Pause size={14} color="#fff" /> : <Play size={14} color="rgba(255,255,255,0.7)" style={{ marginLeft: 2 }} />}
+                        </button>
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: isStreaming ? '#00f0ff' : 'rgba(255,255,255,0.5)', letterSpacing: '0.05em' }}>
+                                {isStreaming ? '♫ STREAMING LIVE' : 'LISTEN LIVE'}
+                            </span>
+                            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>{dj.streamUrl}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Volume2 size={13} color="rgba(255,255,255,0.3)" />
+                            <input
+                                type="range" min={0} max={1} step={0.01}
+                                value={volume}
+                                onChange={e => handleVolume(Number(e.target.value))}
+                                style={{ width: 60, accentColor: '#00f0ff', cursor: 'pointer' }}
+                            />
+                        </div>
                     </div>
                     <div className={styles.djTips}>
                         Tips: L${dj.tipsThisSession.toLocaleString()}
@@ -405,8 +483,8 @@ export default function DashboardPage() {
                     {MOCK_STAFF_FEED.map(msg => (
                         <div key={msg.id} className={styles.feedItem}>
                             <span className={`${styles.feedBadge} ${msg.type === 'alert' ? styles.feedBadgeAlert :
-                                    msg.type === 'message' ? styles.feedBadgeMessage :
-                                        styles.feedBadgeSystem
+                                msg.type === 'message' ? styles.feedBadgeMessage :
+                                    styles.feedBadgeSystem
                                 }`}>
                                 {msg.type}
                             </span>

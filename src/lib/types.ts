@@ -167,10 +167,12 @@ export interface StaffFeedMessage {
 /** Active station data for DJ Booth & Host Station */
 export interface DjBoothData {
   djName: string;
+  slUsername: string;
   genre: string;
   currentTrack: string;
   tipsThisSession: number;
   isLive: boolean;
+  streamUrl: string;
 }
 
 export interface HostStationData {
