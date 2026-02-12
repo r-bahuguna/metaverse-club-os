@@ -7,17 +7,17 @@ import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginPage() {
     const router = useRouter();
-    const { user, loading, error, signInWithEmail, signInAnonymously, clearError } = useAuth();
+    const { firebaseUser, loading, error, signInWithEmail, signInAnonymously, clearError } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
-        if (!loading && user) {
+        if (!loading && firebaseUser) {
             router.push('/dashboard');
         }
-    }, [user, loading, router]);
+    }, [firebaseUser, loading, router]);
 
     async function handleEmailSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -45,7 +45,7 @@ export default function LoginPage() {
         );
     }
 
-    if (user) return null;
+    if (firebaseUser) return null;
 
     return (
         <div style={{

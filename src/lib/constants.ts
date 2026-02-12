@@ -6,6 +6,14 @@ import { NavItem, RoleConfig, UserRole } from './types';
 
 /** Role configuration with colors and labels */
 export const ROLE_CONFIG: Record<UserRole, RoleConfig> = {
+    super_admin: {
+        role: 'super_admin',
+        label: 'Super Admin',
+        shortLabel: 'SA',
+        color: '--neon-red',
+        neonClass: 'glass-neon-cyan',
+        iconName: 'ShieldCheck',
+    },
     owner: {
         role: 'owner',
         label: 'Owner',
@@ -72,7 +80,7 @@ export const NAV_ITEMS: NavItem[] = [
         href: '/dashboard',
         icon: 'LayoutDashboard',
         neonColor: '#4ade80',   // green
-        requiredRoles: ['owner', 'general_manager', 'manager', 'dj', 'host', 'vip_member', 'member'],
+        requiredRoles: ['super_admin', 'owner', 'general_manager', 'manager', 'dj', 'host', 'vip_member', 'member'],
     },
     {
         id: 'schedule',
@@ -80,7 +88,7 @@ export const NAV_ITEMS: NavItem[] = [
         href: '/dashboard/schedule',
         icon: 'CalendarDays',
         neonColor: '#c084fc',   // purple
-        requiredRoles: ['owner', 'general_manager', 'manager', 'dj', 'host'],
+        requiredRoles: ['super_admin', 'owner', 'general_manager', 'manager', 'dj', 'host'],
     },
     {
         id: 'staff',
@@ -88,7 +96,7 @@ export const NAV_ITEMS: NavItem[] = [
         href: '/dashboard/staff',
         icon: 'Users',
         neonColor: '#ff6b9d',   // pink
-        requiredRoles: ['owner', 'general_manager', 'manager'],
+        requiredRoles: ['super_admin', 'owner', 'general_manager', 'manager'],
     },
     {
         id: 'analytics',
@@ -96,7 +104,7 @@ export const NAV_ITEMS: NavItem[] = [
         href: '/dashboard/analytics',
         icon: 'BarChart3',
         neonColor: '#00f0ff',   // cyan
-        requiredRoles: ['owner', 'general_manager'],
+        requiredRoles: ['super_admin', 'owner', 'general_manager'],
     },
     {
         id: 'events',
@@ -104,7 +112,7 @@ export const NAV_ITEMS: NavItem[] = [
         href: '/dashboard/events',
         icon: 'PartyPopper',
         neonColor: '#fbbf24',   // amber
-        requiredRoles: ['owner', 'general_manager', 'manager', 'dj', 'host', 'vip_member', 'member'],
+        requiredRoles: ['super_admin', 'owner', 'general_manager', 'manager', 'dj', 'host', 'vip_member', 'member'],
     },
     {
         id: 'settings',
@@ -112,7 +120,7 @@ export const NAV_ITEMS: NavItem[] = [
         href: '/dashboard/settings',
         icon: 'Settings',
         neonColor: 'rgba(255,255,255,0.7)', // white
-        requiredRoles: ['owner', 'general_manager'],
+        requiredRoles: ['super_admin', 'owner', 'general_manager'],
     },
 ];
 
@@ -125,6 +133,7 @@ export const ROLE_HIERARCHY: UserRole[] = [
     'manager',
     'general_manager',
     'owner',
+    'super_admin',
 ];
 
 /** Check if a role has at least the required privilege level */

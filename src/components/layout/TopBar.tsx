@@ -13,15 +13,17 @@ interface TopBarProps {
 }
 
 const DEMO_ROLES: { role: UserRole; label: string }[] = [
+    { role: 'super_admin', label: '🛡 SA' },
     { role: 'owner', label: 'Owner' },
     { role: 'general_manager', label: 'GM' },
     { role: 'manager', label: 'Manager' },
     { role: 'dj', label: 'DJ' },
     { role: 'host', label: 'Host' },
+    { role: 'member', label: 'Addict' },
 ];
 
 export default function TopBar({ title, onMenuClick }: TopBarProps) {
-    const { currentRole, switchRole } = useRole();
+    const { currentRole, switchRole, isSuperAdmin, isGuest, roleLabel } = useRole();
     const stats = MOCK_DASHBOARD_STATS;
 
     return (
@@ -34,30 +36,41 @@ export default function TopBar({ title, onMenuClick }: TopBarProps) {
             </div>
 
             <div className={styles.right}>
-                {/* Live Ticker */}
-                <div className={styles.ticker}>
-                    <span className={styles.tickerDot} />
-                    <span>LIVE</span>
-                    <span className={styles.tickerSep}>|</span>
-                    <span>L${stats.tonightRevenue.toLocaleString()}</span>
-                    <span className={styles.tickerSep}>|</span>
-                    <span>PEAK: {stats.peakGuests}</span>
-                    <span className={styles.tickerSep}>|</span>
-                    <span>VIBE: {stats.averageVibe}/10</span>
-                </div>
+                {/* Live Ticker — hidden from guests */}
+                {!isGuest && (
+                    <div className={styles.ticker}>
+                        <span className={styles.tickerDot} />
+                        <span>LIVE</span>
+                        <span className={styles.tickerSep}>|</span>
+                        <span>L${stats.tonightRevenue.toLocaleString()}</span>
+                        <span className={styles.tickerSep}>|</span>
+                        <span>PEAK: {stats.peakGuests}</span>
+                        <span className={styles.tickerSep}>|</span>
+                        <span>VIBE: {stats.averageVibe}/10</span>
+                    </div>
+                )}
 
-                {/* Role Switcher (Demo) */}
-                <div className={styles.roleSwitcher}>
-                    {DEMO_ROLES.map(({ role, label }) => (
-                        <button
-                            key={role}
-                            className={`${styles.roleChip} ${currentRole === role ? styles.roleChipActive : ''}`}
-                            onClick={() => switchRole(role)}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
+                {/* Role badge for non-super-admin users */}
+                {!isSuperAdmin && !isGuest && (
+                    <div className={styles.roleBadge}>
+                        {roleLabel}
+                    </div>
+                )}
+
+                {/* Role Switcher — Super Admin ONLY */}
+                {isSuperAdmin && (
+                    <div className={styles.roleSwitcher}>
+                        {DEMO_ROLES.map(({ role, label }) => (
+                            <button
+                                key={role}
+                                className={`${styles.roleChip} ${currentRole === role ? styles.roleChipActive : ''}`}
+                                onClick={() => switchRole(role)}
+                            >
+                                {label}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
         </header>
     );

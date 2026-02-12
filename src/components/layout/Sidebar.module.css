@@ -1,4 +1,4 @@
-/* Sidebar — Cyber Glass Panel with Snowflake Particles */
+/* Sidebar — Cyber Glass Panel with Dreamy Floating Particles */
 
 /* ── Container ── */
 .sidebar {
@@ -35,7 +35,7 @@
     position: relative;
 }
 
-/* ── Snowflake Particles — tiny, many, drifting like snow ── */
+/* ── Floating Particles — dreamy dust motes drifting gently ── */
 .particles {
     position: absolute;
     inset: 0;
@@ -47,15 +47,16 @@
 .particle {
     position: absolute;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.4);
-    animation: snowfall linear infinite;
+    background: rgba(255, 255, 255, 0.35);
+    animation: floatDreamy linear infinite;
 }
 
-/* 12 snowflakes distributed throughout */
+/* 12 particles distributed throughout — each at a random vertical position */
 .particle:nth-child(1) {
     width: 3px;
     height: 3px;
     left: 15%;
+    top: 20%;
     animation-duration: 18s;
     animation-delay: 0s;
 }
@@ -64,6 +65,7 @@
     width: 2px;
     height: 2px;
     left: 35%;
+    top: 55%;
     animation-duration: 22s;
     animation-delay: -3s;
 }
@@ -72,6 +74,7 @@
     width: 4px;
     height: 4px;
     left: 55%;
+    top: 10%;
     animation-duration: 15s;
     animation-delay: -6s;
 }
@@ -80,6 +83,7 @@
     width: 2px;
     height: 2px;
     left: 75%;
+    top: 70%;
     animation-duration: 20s;
     animation-delay: -2s;
 }
@@ -88,6 +92,7 @@
     width: 3px;
     height: 3px;
     left: 25%;
+    top: 40%;
     animation-duration: 24s;
     animation-delay: -8s;
 }
@@ -96,6 +101,7 @@
     width: 2px;
     height: 2px;
     left: 65%;
+    top: 85%;
     animation-duration: 17s;
     animation-delay: -5s;
 }
@@ -104,6 +110,7 @@
     width: 3px;
     height: 3px;
     left: 45%;
+    top: 30%;
     animation-duration: 21s;
     animation-delay: -10s;
 }
@@ -112,6 +119,7 @@
     width: 2px;
     height: 2px;
     left: 85%;
+    top: 60%;
     animation-duration: 19s;
     animation-delay: -7s;
 }
@@ -120,6 +128,7 @@
     width: 4px;
     height: 4px;
     left: 10%;
+    top: 75%;
     animation-duration: 16s;
     animation-delay: -12s;
 }
@@ -128,6 +137,7 @@
     width: 2px;
     height: 2px;
     left: 50%;
+    top: 45%;
     animation-duration: 23s;
     animation-delay: -4s;
 }
@@ -136,6 +146,7 @@
     width: 3px;
     height: 3px;
     left: 80%;
+    top: 15%;
     animation-duration: 14s;
     animation-delay: -9s;
 }
@@ -144,31 +155,42 @@
     width: 2px;
     height: 2px;
     left: 30%;
+    top: 90%;
     animation-duration: 25s;
     animation-delay: -11s;
 }
 
-@keyframes snowfall {
+@keyframes floatDreamy {
     0% {
-        transform: translateY(-10px) translateX(0px);
+        transform: translate(0px, 0px) scale(1);
         opacity: 0;
     }
 
     10% {
-        opacity: 0.6;
+        opacity: 0.5;
     }
 
-    50% {
-        transform: translateY(50vh) translateX(15px);
+    25% {
+        transform: translate(12px, -8px) scale(1.1);
         opacity: 0.4;
     }
 
+    50% {
+        transform: translate(-8px, 6px) scale(0.9);
+        opacity: 0.6;
+    }
+
+    75% {
+        transform: translate(10px, -4px) scale(1.05);
+        opacity: 0.3;
+    }
+
     90% {
-        opacity: 0.2;
+        opacity: 0.15;
     }
 
     100% {
-        transform: translateY(105vh) translateX(-10px);
+        transform: translate(0px, 0px) scale(1);
         opacity: 0;
     }
 }
@@ -398,12 +420,76 @@
     letter-spacing: 0.05em;
 }
 
-.discordGlassOverlay {
+/* Discord online count badge (collapsed) */
+.discordCountBadge {
     position: absolute;
-    inset: 0;
-    border-radius: var(--radius-md);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    pointer-events: none;
+    top: -4px;
+    right: -4px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    background: rgba(88, 101, 242, 0.9);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    line-height: 1;
+}
+
+/* Discord member list */
+.discordMembers {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    background: rgba(88, 101, 242, 0.03);
+    border: 1px solid rgba(88, 101, 242, 0.08);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.discordMember {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 4px;
+    border-radius: 4px;
+    transition: background var(--duration-fast) var(--ease-out);
+}
+
+.discordMember:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.discordMemberAvatar {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.discordStatusDot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.discordMemberName {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .discordCollapsed {
@@ -426,6 +512,7 @@
     cursor: pointer;
     transition: all var(--duration-fast) var(--ease-out);
     text-decoration: none;
+    position: relative;
 }
 
 .discordIconBtn:hover {
@@ -448,7 +535,6 @@
     gap: var(--space-3);
     padding: var(--space-2) var(--space-2);
     border-radius: var(--radius-md);
-    cursor: pointer;
     transition: background var(--duration-fast) var(--ease-out);
 }
 
@@ -492,6 +578,33 @@
     font-size: var(--text-xs);
     color: var(--text-muted);
     white-space: nowrap;
+}
+
+/* Logout button */
+.logoutBtn {
+    margin-left: auto;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-md);
+    background: none;
+    border: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-out);
+    flex-shrink: 0;
+}
+
+.logoutBtn:hover {
+    background: rgba(255, 60, 60, 0.08);
+    border-color: rgba(255, 60, 60, 0.2);
+    color: #ff6b6b;
+}
+
+.sidebarCollapsed .logoutBtn {
+    display: none;
 }
 
 /* ── Mobile ── */

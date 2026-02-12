@@ -5,13 +5,26 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     LayoutDashboard, CalendarDays, Users, BarChart3,
-    PartyPopper, Settings, Zap, ChevronLeft,
+    PartyPopper, Settings, Zap, ChevronLeft, LogOut,
 } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
-import { NAV_ITEMS, ROLE_CONFIG, BRAND } from '@/lib/constants';
+import { useAuth } from '@/hooks/useAuth';
+import { NAV_ITEMS, ROLE_CONFIG, BRAND, DISCORD } from '@/lib/constants';
 import styles from './Sidebar.module.css';
 
-const DISCORD_JOIN_URL = 'https://discord.com/invite/2aYwKSsc?utm_source=Discord%20Widget&utm_medium=Connect';
+/* ── Discord widget types ── */
+interface DiscordMember {
+    id: string;
+    username: string;
+    status: 'online' | 'idle' | 'dnd';
+    avatar_url: string;
+}
+
+interface DiscordWidget {
+    presence_count: number;
+    members: DiscordMember[];
+    instant_invite: string;
+}
 
 const iconMap: Record<string, React.ReactNode> = {
     LayoutDashboard: <LayoutDashboard size={20} />,
@@ -40,6 +53,13 @@ function NeonDiscordIcon({ size = 20 }: { size?: number }) {
     );
 }
 
+/* ── Status dot color ── */
+function statusColor(status: string): string {
+    if (status === 'online') return '#4ade80';
+    if (status === 'idle') return '#fbbf24';
+    return '#f87171';
+}
+
 interface SidebarProps {
     isOpen: boolean;
     onClose: () => void;
@@ -47,14 +67,32 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const pathname = usePathname();
-    const { currentUser, currentRole } = useRole();
+    const { currentUser, currentRole, isGuest, roleLabel } = useRole();
+    const { signOut } = useAuth();
     const roleConfig = ROLE_CONFIG[currentRole];
 
     const [collapsed, setCollapsed] = useState(false);
+    const [discord, setDiscord] = useState<DiscordWidget | null>(null);
 
     useEffect(() => {
         const saved = localStorage.getItem('sidebar-collapsed');
         if (saved === 'true') setCollapsed(true);
+    }, []);
+
+    /* Fetch Discord widget data */
+    useEffect(() => {
+        async function fetchDiscord() {
+            try {
+                const res = await fetch(DISCORD.jsonApi);
+                if (res.ok) {
+                    const data: DiscordWidget = await res.json();
+                    setDiscord(data);
+                }
+            } catch { /* silently fail — Discord is optional */ }
+        }
+        fetchDiscord();
+        const interval = setInterval(fetchDiscord, 60000); // refresh every minute
+        return () => clearInterval(interval);
     }, []);
 
     function toggleCollapse() {
@@ -67,6 +105,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     const filteredNav = NAV_ITEMS.filter(item =>
         item.requiredRoles.includes(currentRole)
     );
+
+    /* Display name — from Firestore profile, or 'Guest' for anonymous */
+    const displayName = isGuest ? 'Guest' : (currentUser?.displayName ?? 'User');
+    const displayInitial = displayName.charAt(0).toUpperCase();
 
     return (
         <>
@@ -85,7 +127,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </button>
 
                 <div className={styles.sidebarInner}>
-                    {/* Snowflake particles */}
+                    {/* Floating particles */}
                     <div className={styles.particles}>
                         {Array.from({ length: 12 }).map((_, i) => (
                             <div key={i} className={styles.particle} />
@@ -143,34 +185,62 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         })}
                     </nav>
 
-                    {/* Discord — neon compact banner / icon */}
+                    {/* Discord — neon banner with live members */}
                     <div className={styles.discordSection}>
                         {collapsed ? (
                             <div className={styles.discordCollapsed}>
                                 <a
-                                    href={DISCORD_JOIN_URL}
+                                    href={discord?.instant_invite ?? DISCORD.widgetUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className={styles.discordIconBtn}
-                                    title="Join Discord"
+                                    title={`Discord — ${discord?.presence_count ?? 0} online`}
                                 >
                                     <NeonDiscordIcon size={18} />
+                                    {discord && discord.presence_count > 0 && (
+                                        <span className={styles.discordCountBadge}>
+                                            {discord.presence_count}
+                                        </span>
+                                    )}
                                 </a>
                             </div>
                         ) : (
-                            <a
-                                href={DISCORD_JOIN_URL}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={styles.discordMiniBanner}
-                            >
-                                <NeonDiscordIcon size={22} />
-                                <div className={styles.discordBannerText}>
-                                    <span className={styles.discordBannerTitle}>Risky Desires</span>
-                                    <span className={styles.discordBannerSub}>Join our Discord</span>
-                                </div>
-                                <span className={styles.discordJoinBtn}>Join</span>
-                            </a>
+                            <div className={styles.discordExpanded}>
+                                <a
+                                    href={discord?.instant_invite ?? DISCORD.widgetUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={styles.discordMiniBanner}
+                                >
+                                    <NeonDiscordIcon size={22} />
+                                    <div className={styles.discordBannerText}>
+                                        <span className={styles.discordBannerTitle}>Risky Desires</span>
+                                        <span className={styles.discordBannerSub}>
+                                            {discord ? `${discord.presence_count} online` : 'Join Discord'}
+                                        </span>
+                                    </div>
+                                    <span className={styles.discordJoinBtn}>Join</span>
+                                </a>
+
+                                {/* Online members list */}
+                                {discord && discord.members.length > 0 && (
+                                    <div className={styles.discordMembers}>
+                                        {discord.members.slice(0, 8).map(member => (
+                                            <div key={member.id} className={styles.discordMember}>
+                                                <div className={styles.discordMemberAvatar}>
+                                                    <span
+                                                        className={styles.discordStatusDot}
+                                                        style={{ background: statusColor(member.status) }}
+                                                    />
+                                                </div>
+                                                <span className={styles.discordMemberName}>
+                                                    {member.username}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
 
@@ -178,12 +248,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <div className={styles.userSection}>
                         <div className={styles.userCard}>
                             <div className={styles.avatar}>
-                                {currentUser.displayName.charAt(0)}
+                                {displayInitial}
                             </div>
                             <div className={styles.userInfo}>
-                                <div className={styles.userName}>{currentUser.displayName}</div>
-                                <div className={styles.userRole}>{roleConfig.label}</div>
+                                <div className={styles.userName}>{displayName}</div>
+                                <div className={styles.userRole}>{roleLabel}</div>
                             </div>
+                            <button
+                                className={styles.logoutBtn}
+                                onClick={signOut}
+                                title="Sign Out"
+                            >
+                                <LogOut size={14} />
+                            </button>
                         </div>
                     </div>
                 </div>

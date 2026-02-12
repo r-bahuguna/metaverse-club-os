@@ -4,6 +4,7 @@
 
 /** Role hierarchy for access control */
 export type UserRole =
+  | 'super_admin'
   | 'owner'
   | 'general_manager'
   | 'manager'
@@ -11,6 +12,19 @@ export type UserRole =
   | 'host'
   | 'vip_member'
   | 'member'; // "Risky Addicts"
+
+/** Application user profile (Firestore-backed) */
+export interface AppUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  slName?: string;
+  slUuid?: string;
+  createdAt?: string;
+  createdBy?: string;
+  onlineStatus?: OnlineStatus;
+}
 
 /** Staff online status */
 export type OnlineStatus = 'online' | 'away' | 'offline';

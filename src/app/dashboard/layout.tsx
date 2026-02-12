@@ -64,16 +64,16 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { user, loading } = useAuth();
+    const { firebaseUser, loading } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-        if (!loading && !user) {
+        if (!loading && !firebaseUser) {
             router.push('/login');
         }
-    }, [user, loading, router]);
+    }, [firebaseUser, loading, router]);
 
-    if (loading || !user) {
+    if (loading || !firebaseUser) {
         return (
             <div style={{
                 minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center',

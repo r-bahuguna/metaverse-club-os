@@ -27,6 +27,7 @@ const roleGradients: Record<string, string> = {
 };
 
 const neonMap: Record<UserRole, 'cyan' | 'purple' | 'pink' | 'green' | 'none'> = {
+    super_admin: 'cyan',
     owner: 'cyan',
     general_manager: 'cyan',
     manager: 'green',

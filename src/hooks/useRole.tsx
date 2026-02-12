@@ -1,40 +1,75 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { UserRole, User } from '@/lib/types';
-import { MOCK_STAFF } from '@/lib/mock-data';
-import { hasPermission } from '@/lib/constants';
+import React, { createContext, useContext, useCallback } from 'react';
+import { UserRole, AppUser } from '@/lib/types';
+import { hasPermission, ROLE_CONFIG } from '@/lib/constants';
+import { useAuth } from '@/hooks/useAuth';
 
 interface RoleContextValue {
-    currentUser: User;
+    /** Resolved app user (null for anonymous guests) */
+    currentUser: AppUser | null;
+    /** Active role — from Firestore profile or 'member' for guests */
     currentRole: UserRole;
+    /** Super Admin can switch role for debugging */
     switchRole: (role: UserRole) => void;
+    /** Permission check against active role */
     can: (requiredRole: UserRole) => boolean;
     isStaff: boolean;
     isManagement: boolean;
+    isSuperAdmin: boolean;
+    isGuest: boolean;
+    roleLabel: string;
 }
 
 const RoleContext = createContext<RoleContextValue | null>(null);
 
 export function RoleProvider({ children }: { children: React.ReactNode }) {
-    const [currentRole, setCurrentRole] = useState<UserRole>('owner');
+    const { appUser, isAnonymous, isSuperAdmin } = useAuth();
 
-    const currentUser = MOCK_STAFF.find(s => s.role === currentRole) || MOCK_STAFF[0];
+    /* Super Admin override — stored in state for dev role switching */
+    const [overrideRole, setOverrideRole] = React.useState<UserRole | null>(null);
+
+    /* Determine the active role */
+    const resolvedRole: UserRole = (() => {
+        // Super Admin override takes priority (for debugging)
+        if (isSuperAdmin && overrideRole) return overrideRole;
+        // Firestore profile has authority
+        if (appUser?.role) return appUser.role;
+        // Anonymous users are members (Risky Addicts)
+        if (isAnonymous) return 'member';
+        // Fallback
+        return 'member';
+    })();
 
     const switchRole = useCallback((role: UserRole) => {
-        setCurrentRole(role);
-    }, []);
+        // Only super admin can switch roles
+        if (isSuperAdmin) {
+            setOverrideRole(role);
+        }
+    }, [isSuperAdmin]);
 
     const can = useCallback((requiredRole: UserRole) => {
-        return hasPermission(currentRole, requiredRole);
-    }, [currentRole]);
+        return hasPermission(resolvedRole, requiredRole);
+    }, [resolvedRole]);
 
-    const isStaff = hasPermission(currentRole, 'host');
-    const isManagement = hasPermission(currentRole, 'manager');
+    const isStaff = hasPermission(resolvedRole, 'host');
+    const isManagement = hasPermission(resolvedRole, 'manager');
+    const isGuest = isAnonymous && !appUser;
+    const roleLabel = ROLE_CONFIG[resolvedRole]?.label ?? 'Guest';
 
     return (
         <RoleContext.Provider
-            value={{ currentUser: currentUser as User, currentRole, switchRole, can, isStaff, isManagement }}
+            value={{
+                currentUser: appUser,
+                currentRole: resolvedRole,
+                switchRole,
+                can,
+                isStaff,
+                isManagement,
+                isSuperAdmin,
+                isGuest,
+                roleLabel,
+            }}
         >
             {children}
         </RoleContext.Provider>

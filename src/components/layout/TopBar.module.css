@@ -108,6 +108,18 @@
     color: var(--glass-border);
 }
 
+/* Static role badge (non-super-admin) */
+.roleBadge {
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: var(--weight-medium);
+    color: var(--neon-cyan);
+    background: var(--neon-cyan-dim);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
 @media (max-width: 768px) {
     .topbar {
         left: 0;
@@ -118,6 +130,10 @@
     }
 
     .roleSwitcher {
+        display: none;
+    }
+
+    .roleBadge {
         display: none;
     }
 

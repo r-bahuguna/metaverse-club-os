@@ -15,7 +15,6 @@ import {
 import GlassCard from '@/components/ui/GlassCard';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { useRole } from '@/hooks/useRole';
-import { useAuth } from '@/hooks/useAuth';
 import {
     MOCK_DASHBOARD_STATS,
     MOCK_EVENTS,
@@ -119,8 +118,7 @@ function TipButton({ label, neonColor, icon: Icon }: { label: string; neonColor:
 }
 
 export default function DashboardPage() {
-    const { can } = useRole();
-    const { isAnonymous } = useAuth();
+    const { can, isGuest } = useRole();
     const stats = MOCK_DASHBOARD_STATS;
     const dj = MOCK_DJ_BOOTH;
     const host = MOCK_HOST_STATION;
@@ -128,7 +126,6 @@ export default function DashboardPage() {
     const capacityColor = capacityPct > 85 ? '#ff4444' : capacityPct > 60 ? '#fbbf24' : '#4ade80';
 
     /* Guest = anonymous user → restricted view */
-    const isGuest = isAnonymous;
 
     /* ── Stream Player State ── */
     const audioRef = useRef<HTMLAudioElement | null>(null);
