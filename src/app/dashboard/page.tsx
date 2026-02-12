@@ -8,11 +8,14 @@ import {
 import {
     Headphones, Mic, Users, Clock,
     UserPlus, Activity,
-    Play, Pause, Volume2,
+    CalendarDays, TrendingUp,
+    Play, Pause, Volume2, Heart,
+    DollarSign, Zap,
 } from 'lucide-react';
-import { useRole } from '@/hooks/useRole';
 import GlassCard from '@/components/ui/GlassCard';
 import StatusBadge from '@/components/ui/StatusBadge';
+import { useRole } from '@/hooks/useRole';
+import { useAuth } from '@/hooks/useAuth';
 import {
     MOCK_DASHBOARD_STATS,
     MOCK_EVENTS,
@@ -27,30 +30,28 @@ import styles from './page.module.css';
 
 /* ── Client-only time formatting (avoids hydration mismatch) ── */
 function useTimeAgo(timestamp: string): string {
-    const [text, setText] = useState('—');
+    const [label, setLabel] = useState('');
     useEffect(() => {
-        const update = () => {
+        function update() {
             const diff = Date.now() - new Date(timestamp).getTime();
-            const mins = Math.floor(diff / 60000);
-            if (mins < 1) setText('just now');
-            else if (mins < 60) setText(`${mins}m ago`);
-            else setText(`${Math.floor(mins / 60)}h ago`);
-        };
+            const mins = Math.round(diff / 60000);
+            setLabel(mins < 1 ? 'now' : mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`);
+        }
         update();
         const id = setInterval(update, 60000);
         return () => clearInterval(id);
     }, [timestamp]);
-    return text;
+    return label;
 }
 
 function TimeAgo({ timestamp }: { timestamp: string }) {
-    const text = useTimeAgo(timestamp);
-    return <span className={styles.tipTime}>{text}</span>;
+    const label = useTimeAgo(timestamp);
+    return <span className={styles.timeAgo}>{label}</span>;
 }
 
 function FeedTimeAgo({ timestamp }: { timestamp: string }) {
-    const text = useTimeAgo(timestamp);
-    return <div className={styles.feedTime}>{text}</div>;
+    const label = useTimeAgo(timestamp);
+    return <span className={styles.feedTime}>{label}</span>;
 }
 
 function formatDate(dateStr: string): { day: string; month: string } {
@@ -65,22 +66,17 @@ function formatDate(dateStr: string): { day: string; month: string } {
 function CustomTooltip({ active, payload, label }: any) {
     if (!active || !payload) return null;
     return (
-        <div
-            style={{
-                background: 'rgba(10, 10, 20, 0.9)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '8px',
-                padding: '10px 14px',
-                backdropFilter: 'blur(12px)',
-            }}
-        >
-            <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginBottom: '6px', fontFamily: 'var(--font-mono)' }}>
-                {label}
-            </p>
+        <div style={{
+            background: 'rgba(10, 10, 20, 0.92)', border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 10, padding: '10px 14px', backdropFilter: 'blur(20px)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+        }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 6, fontFamily: 'var(--font-mono)' }}>{label}</div>
             {payload.map((entry: any, i: number) => (
-                <p key={i} style={{ fontSize: '12px', color: entry.color, fontFamily: 'var(--font-mono)' }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(255,255,255,0.85)', marginBottom: 2 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: entry.color, display: 'inline-block' }} />
                     {entry.name}: L${entry.value.toLocaleString()}
-                </p>
+                </div>
             ))}
         </div>
     );
@@ -90,13 +86,49 @@ function CustomTooltip({ active, payload, label }: any) {
 /* ── Waveform bars heights ── */
 const WAVE_HEIGHTS = [60, 80, 45, 90, 70, 55, 85, 40, 75, 95, 50, 65, 88, 42, 78, 58];
 
+/* ── Tip Button ── */
+function TipButton({ label, neonColor, icon: Icon }: { label: string; neonColor: string; icon: React.ElementType }) {
+    const [tipped, setTipped] = useState(false);
+
+    function handleTip() {
+        setTipped(true);
+        setTimeout(() => setTipped(false), 2000);
+    }
+
+    return (
+        <button
+            onClick={handleTip}
+            style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', borderRadius: 8,
+                background: tipped
+                    ? `linear-gradient(135deg, ${neonColor}33, ${neonColor}22)`
+                    : `rgba(255,255,255,0.03)`,
+                border: `1px solid ${tipped ? neonColor + '55' : 'rgba(255,255,255,0.06)'}`,
+                color: tipped ? neonColor : 'rgba(255,255,255,0.5)',
+                fontSize: 12, fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                whiteSpace: 'nowrap',
+            }}
+        >
+            <Icon size={13} />
+            {tipped ? '❤️ Tipped!' : label}
+        </button>
+    );
+}
+
 export default function DashboardPage() {
     const { can } = useRole();
+    const { isAnonymous } = useAuth();
     const stats = MOCK_DASHBOARD_STATS;
     const dj = MOCK_DJ_BOOTH;
     const host = MOCK_HOST_STATION;
     const capacityPct = Math.round((stats.currentGuests / stats.maxCapacity) * 100);
     const capacityColor = capacityPct > 85 ? '#ff4444' : capacityPct > 60 ? '#fbbf24' : '#4ade80';
+
+    /* Guest = anonymous user → restricted view */
+    const isGuest = isAnonymous;
 
     /* ── Stream Player State ── */
     const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -125,7 +157,6 @@ export default function DashboardPage() {
         if (audioRef.current) audioRef.current.volume = v;
     }
 
-    // Cleanup on unmount
     useEffect(() => {
         return () => {
             if (audioRef.current) {
@@ -209,8 +240,12 @@ export default function DashboardPage() {
                             />
                         </div>
                     </div>
-                    <div className={styles.djTips}>
-                        Tips: L${dj.tipsThisSession.toLocaleString()}
+                    {/* DJ Tips + Tip Button */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                        <div className={styles.djTips}>
+                            Tips: L${dj.tipsThisSession.toLocaleString()}
+                        </div>
+                        <TipButton label="Tip DJ" neonColor="#c084fc" icon={Heart} />
                     </div>
                 </div>
 
@@ -244,19 +279,54 @@ export default function DashboardPage() {
                             <span className={styles.hostStatLabel}>New</span>
                         </div>
                     </div>
-                    <div className={styles.hostActions}>
-                        <button className={`${styles.hostBtn} ${styles.hostBtnPrimary}`}>Send Message</button>
-                        <button className={`${styles.hostBtn} ${styles.hostBtnSecondary}`}>View Profile</button>
+                    {/* Host Actions + Tip */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                        {!isGuest && (
+                            <>
+                                <button className={`${styles.hostBtn} ${styles.hostBtnPrimary}`}>Send Message</button>
+                                <button className={`${styles.hostBtn} ${styles.hostBtnSecondary}`}>View Profile</button>
+                            </>
+                        )}
+                        <TipButton label="Tip Host" neonColor="#ff6b9d" icon={Heart} />
                     </div>
                 </div>
             </div>
 
+            {/* ═══ CLUB TIP — for guests to tip the club directly ═══ */}
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 16px', borderRadius: 12,
+                background: 'rgba(0, 240, 255, 0.03)',
+                border: '1px solid rgba(0, 240, 255, 0.08)',
+                margin: '4px 0 8px',
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                        width: 32, height: 32, borderRadius: 8,
+                        background: 'linear-gradient(135deg, rgba(0, 240, 255, 0.12), rgba(192, 132, 252, 0.12))',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        <Zap size={16} color="#00f0ff" />
+                    </div>
+                    <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+                            Risky Desires Club
+                        </div>
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+                            Support the club • Club tip jar: L${stats.tipsClub.toLocaleString()} tonight
+                        </div>
+                    </div>
+                </div>
+                <TipButton label="Tip Club" neonColor="#00f0ff" icon={DollarSign} />
+            </div>
+
             {/* ═══ MAIN GRID: Vibe Graph + Real-Time Stats ═══ */}
+            {/* Manager+ sections are hidden from guests */}
             <div className={styles.mainGrid}>
                 {/* Left Column */}
                 <div className={styles.leftCol}>
-                    {/* Vibe Graph */}
-                    {can('manager') && (
+                    {/* Vibe Graph — managers only */}
+                    {!isGuest && can('manager') && (
                         <GlassCard neon="purple">
                             <div className={styles.sectionHeader}>
                                 <h2 className={styles.sectionTitle}>Vibe Graph</h2>
@@ -304,7 +374,7 @@ export default function DashboardPage() {
                         </GlassCard>
                     )}
 
-                    {/* Upcoming Events */}
+                    {/* Upcoming Events — visible to everyone */}
                     <GlassCard>
                         <div className={styles.sectionHeader}>
                             <h2 className={styles.sectionTitle}>Upcoming Events</h2>
@@ -331,129 +401,132 @@ export default function DashboardPage() {
                     </GlassCard>
                 </div>
 
-                {/* Right Column — Real-Time Stats */}
+                {/* Right Column — Real-Time Stats (staff only) */}
                 <div className={styles.rightCol}>
-                    <GlassCard neon="cyan">
-                        <div className={styles.sectionHeader}>
-                            <h2 className={styles.sectionTitle}>
-                                <StatusBadge variant="online" pulse />
-                                Real-Time Stats
-                            </h2>
-                        </div>
+                    {!isGuest && (
+                        <GlassCard neon="cyan">
+                            <div className={styles.sectionHeader}>
+                                <h2 className={styles.sectionTitle}>
+                                    <StatusBadge variant="online" pulse />
+                                    Real-Time Stats
+                                </h2>
+                            </div>
 
-                        {/* Capacity + Avg Spend */}
-                        <div className={styles.statsPanel}>
-                            <div className={styles.statTile}>
-                                <div className={styles.statValue}>
-                                    {stats.currentGuests}<span className={styles.statValueSmall}> / {stats.maxCapacity}</span>
+                            {/* Capacity + Avg Spend */}
+                            <div className={styles.statsPanel}>
+                                <div className={styles.statTile}>
+                                    <div className={styles.statValue}>
+                                        {stats.currentGuests}<span className={styles.statValueSmall}> / {stats.maxCapacity}</span>
+                                    </div>
+                                    <div className={styles.statLabel}>Current Guests</div>
+                                    <div className={styles.capacityBar}>
+                                        <div
+                                            className={styles.capacityFill}
+                                            style={{ width: `${capacityPct}%`, background: capacityColor }}
+                                        />
+                                    </div>
                                 </div>
-                                <div className={styles.statLabel}>Current Guests</div>
-                                <div className={styles.capacityBar}>
-                                    <div
-                                        className={styles.capacityFill}
-                                        style={{ width: `${capacityPct}%`, background: capacityColor }}
-                                    />
+                                <div className={styles.statTile}>
+                                    <div className={styles.statValue}>
+                                        L${stats.avgSpendPerGuest}
+                                    </div>
+                                    <div className={styles.statLabel}>Avg Spend / Guest</div>
                                 </div>
                             </div>
-                            <div className={styles.statTile}>
-                                <div className={styles.statValue}>
-                                    L${stats.avgSpendPerGuest}
-                                </div>
-                                <div className={styles.statLabel}>Avg Spend / Guest</div>
-                            </div>
-                        </div>
 
-                        {/* Tips Breakdown */}
-                        <div className={styles.tipsBreakdown}>
-                            <svg width="52" height="52" viewBox="0 0 52 52">
-                                {/* Mini donut chart */}
-                                {(() => {
-                                    const total = stats.tipsClub + stats.tipsHost + stats.tipsDj;
-                                    const r = 20; const c = 2 * Math.PI * r;
-                                    const pClub = stats.tipsClub / total;
-                                    const pHost = stats.tipsHost / total;
-                                    const pDj = stats.tipsDj / total;
-                                    return (
-                                        <g transform="translate(26,26)">
-                                            <circle r={r} fill="none" stroke="#00f0ff" strokeWidth="5"
-                                                strokeDasharray={`${pClub * c} ${c}`}
-                                                strokeDashoffset="0"
-                                                transform="rotate(-90)"
-                                            />
-                                            <circle r={r} fill="none" stroke="#ff6b9d" strokeWidth="5"
-                                                strokeDasharray={`${pHost * c} ${c}`}
-                                                strokeDashoffset={`${-(pClub) * c}`}
-                                                transform="rotate(-90)"
-                                            />
-                                            <circle r={r} fill="none" stroke="#c084fc" strokeWidth="5"
-                                                strokeDasharray={`${pDj * c} ${c}`}
-                                                strokeDashoffset={`${-(pClub + pHost) * c}`}
-                                                transform="rotate(-90)"
-                                            />
-                                        </g>
-                                    );
-                                })()}
-                            </svg>
-                            <div className={styles.tipsLegend}>
-                                <div className={styles.tipsLegendItem}>
-                                    <span className={styles.tipsLegendDot} style={{ background: '#00f0ff' }} />
-                                    Club
-                                    <span className={styles.tipsLegendValue}>L${stats.tipsClub.toLocaleString()}</span>
-                                </div>
-                                <div className={styles.tipsLegendItem}>
-                                    <span className={styles.tipsLegendDot} style={{ background: '#ff6b9d' }} />
-                                    Host
-                                    <span className={styles.tipsLegendValue}>L${stats.tipsHost.toLocaleString()}</span>
-                                </div>
-                                <div className={styles.tipsLegendItem}>
-                                    <span className={styles.tipsLegendDot} style={{ background: '#c084fc' }} />
-                                    DJ
-                                    <span className={styles.tipsLegendValue}>L${stats.tipsDj.toLocaleString()}</span>
+                            {/* Tips Breakdown */}
+                            <div className={styles.tipsBreakdown}>
+                                <svg width="52" height="52" viewBox="0 0 52 52">
+                                    {(() => {
+                                        const total = stats.tipsClub + stats.tipsHost + stats.tipsDj;
+                                        const r = 20; const c = 2 * Math.PI * r;
+                                        const pClub = stats.tipsClub / total;
+                                        const pHost = stats.tipsHost / total;
+                                        const pDj = stats.tipsDj / total;
+                                        return (
+                                            <g transform="translate(26,26)">
+                                                <circle r={r} fill="none" stroke="#00f0ff" strokeWidth="5"
+                                                    strokeDasharray={`${pClub * c} ${c}`}
+                                                    strokeDashoffset="0"
+                                                    transform="rotate(-90)"
+                                                />
+                                                <circle r={r} fill="none" stroke="#ff6b9d" strokeWidth="5"
+                                                    strokeDasharray={`${pHost * c} ${c}`}
+                                                    strokeDashoffset={`${-(pClub) * c}`}
+                                                    transform="rotate(-90)"
+                                                />
+                                                <circle r={r} fill="none" stroke="#c084fc" strokeWidth="5"
+                                                    strokeDasharray={`${pDj * c} ${c}`}
+                                                    strokeDashoffset={`${-(pClub + pHost) * c}`}
+                                                    transform="rotate(-90)"
+                                                />
+                                            </g>
+                                        );
+                                    })()}
+                                </svg>
+                                <div className={styles.tipsLegend}>
+                                    <div className={styles.tipsLegendItem}>
+                                        <span className={styles.tipsLegendDot} style={{ background: '#00f0ff' }} />
+                                        Club
+                                        <span className={styles.tipsLegendValue}>L${stats.tipsClub.toLocaleString()}</span>
+                                    </div>
+                                    <div className={styles.tipsLegendItem}>
+                                        <span className={styles.tipsLegendDot} style={{ background: '#ff6b9d' }} />
+                                        Host
+                                        <span className={styles.tipsLegendValue}>L${stats.tipsHost.toLocaleString()}</span>
+                                    </div>
+                                    <div className={styles.tipsLegendItem}>
+                                        <span className={styles.tipsLegendDot} style={{ background: '#c084fc' }} />
+                                        DJ
+                                        <span className={styles.tipsLegendValue}>L${stats.tipsDj.toLocaleString()}</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Group Stats */}
-                        <div style={{ marginTop: 'var(--space-3)' }}>
-                            <div className={styles.groupStats}>
-                                <div className={styles.groupStatRow}>
-                                    <span><Users size={12} style={{ marginRight: 6, verticalAlign: 'middle' }} />Members Joined</span>
-                                    <span className={styles.groupStatValue}>{stats.groupMembersJoined}</span>
-                                </div>
-                                <div className={styles.groupStatRow}>
-                                    <span><Activity size={12} style={{ marginRight: 6, verticalAlign: 'middle' }} />Online (not joined)</span>
-                                    <span className={styles.groupStatValue}>{stats.groupMembersOnline}</span>
-                                </div>
-                                <div className={styles.groupStatRow}>
-                                    <span><UserPlus size={12} style={{ marginRight: 6, verticalAlign: 'middle' }} />New Members</span>
-                                    <span className={styles.groupStatValue}>{stats.newMembersThisEvent}</span>
+                            {/* Group Stats */}
+                            <div style={{ marginTop: 'var(--space-3)' }}>
+                                <div className={styles.groupStats}>
+                                    <div className={styles.groupStatRow}>
+                                        <span><Users size={12} style={{ marginRight: 6, verticalAlign: 'middle' }} />Members Joined</span>
+                                        <span className={styles.groupStatValue}>{stats.groupMembersJoined}</span>
+                                    </div>
+                                    <div className={styles.groupStatRow}>
+                                        <span><Activity size={12} style={{ marginRight: 6, verticalAlign: 'middle' }} />Online (not joined)</span>
+                                        <span className={styles.groupStatValue}>{stats.groupMembersOnline}</span>
+                                    </div>
+                                    <div className={styles.groupStatRow}>
+                                        <span><UserPlus size={12} style={{ marginRight: 6, verticalAlign: 'middle' }} />New Members</span>
+                                        <span className={styles.groupStatValue}>{stats.newMembersThisEvent}</span>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </GlassCard>
+                        </GlassCard>
+                    )}
 
-                    {/* New Guests */}
-                    <GlassCard>
-                        <div className={styles.sectionHeader}>
-                            <h2 className={styles.sectionTitle}>Guest Activity</h2>
-                            <span className={styles.sectionBadge}>{MOCK_GUEST_VISITS.length}</span>
-                        </div>
-                        <div className={styles.guestList}>
-                            {MOCK_GUEST_VISITS.map(g => (
-                                <div key={g.id} className={styles.guestItem}>
-                                    <span className={styles.guestName}>{g.name}</span>
-                                    {g.isNewMember && <span className={styles.guestNew}>new</span>}
-                                    <span className={styles.guestDuration}>
-                                        <Clock size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
-                                        {g.duration}m
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </GlassCard>
+                    {/* Guest Activity — staff only */}
+                    {!isGuest && (
+                        <GlassCard>
+                            <div className={styles.sectionHeader}>
+                                <h2 className={styles.sectionTitle}>Guest Activity</h2>
+                                <span className={styles.sectionBadge}>{MOCK_GUEST_VISITS.length}</span>
+                            </div>
+                            <div className={styles.guestList}>
+                                {MOCK_GUEST_VISITS.map(g => (
+                                    <div key={g.id} className={styles.guestItem}>
+                                        <span className={styles.guestName}>{g.name}</span>
+                                        {g.isNewMember && <span className={styles.guestNew}>new</span>}
+                                        <span className={styles.guestDuration}>
+                                            <Clock size={10} style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                                            {g.duration}m
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </GlassCard>
+                    )}
 
-                    {/* Tip Feed */}
-                    {can('manager') && (
+                    {/* Tip Feed — managers only */}
+                    {!isGuest && can('manager') && (
                         <GlassCard neon="green">
                             <div className={styles.sectionHeader}>
                                 <h2 className={styles.sectionTitle}>Tip Feed</h2>
@@ -473,29 +546,31 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* ═══ STAFF FEED — Horizontal Ticker ═══ */}
-            <GlassCard>
-                <div className={styles.sectionHeader}>
-                    <h2 className={styles.sectionTitle}>Staff Feed</h2>
-                    <span className={styles.sectionBadge}>{MOCK_STAFF_FEED.length}</span>
-                </div>
-                <div className={styles.staffFeed}>
-                    {MOCK_STAFF_FEED.map(msg => (
-                        <div key={msg.id} className={styles.feedItem}>
-                            <span className={`${styles.feedBadge} ${msg.type === 'alert' ? styles.feedBadgeAlert :
-                                msg.type === 'message' ? styles.feedBadgeMessage :
-                                    styles.feedBadgeSystem
-                                }`}>
-                                {msg.type}
-                            </span>
-                            <div className={styles.feedContent}>
-                                <div className={styles.feedText}>{msg.message}</div>
-                                <FeedTimeAgo timestamp={msg.timestamp} />
+            {/* ═══ STAFF FEED — Staff only ═══ */}
+            {!isGuest && (
+                <GlassCard>
+                    <div className={styles.sectionHeader}>
+                        <h2 className={styles.sectionTitle}>Staff Feed</h2>
+                        <span className={styles.sectionBadge}>{MOCK_STAFF_FEED.length}</span>
+                    </div>
+                    <div className={styles.staffFeed}>
+                        {MOCK_STAFF_FEED.map(msg => (
+                            <div key={msg.id} className={styles.feedItem}>
+                                <span className={`${styles.feedBadge} ${msg.type === 'alert' ? styles.feedBadgeAlert :
+                                    msg.type === 'message' ? styles.feedBadgeMessage :
+                                        styles.feedBadgeSystem
+                                    }`}>
+                                    {msg.type}
+                                </span>
+                                <div className={styles.feedContent}>
+                                    <div className={styles.feedText}>{msg.message}</div>
+                                    <FeedTimeAgo timestamp={msg.timestamp} />
+                                </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
-            </GlassCard>
+                        ))}
+                    </div>
+                </GlassCard>
+            )}
         </div>
     );
 }

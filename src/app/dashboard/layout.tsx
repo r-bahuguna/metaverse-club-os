@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { RoleProvider } from '@/hooks/useRole';
 import { SettingsProvider } from '@/hooks/useSettings';
@@ -12,9 +12,37 @@ import styles from './layout.module.css';
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+    /* Listen for sidebar collapse state changes */
+    useEffect(() => {
+        const saved = localStorage.getItem('sidebar-collapsed');
+        if (saved === 'true') setSidebarCollapsed(true);
+
+        function handleStorage(e: StorageEvent) {
+            if (e.key === 'sidebar-collapsed') {
+                setSidebarCollapsed(e.newValue === 'true');
+            }
+        }
+        window.addEventListener('storage', handleStorage);
+
+        /* Also poll for same-tab changes */
+        const interval = setInterval(() => {
+            const current = localStorage.getItem('sidebar-collapsed') === 'true';
+            setSidebarCollapsed(prev => {
+                if (prev !== current) return current;
+                return prev;
+            });
+        }, 200);
+
+        return () => {
+            window.removeEventListener('storage', handleStorage);
+            clearInterval(interval);
+        };
+    }, []);
 
     return (
-        <div className={styles.dashboardLayout}>
+        <div className={`${styles.dashboardLayout} ${sidebarCollapsed ? 'sidebarIsCollapsed' : ''}`}>
             <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
             <TopBar
                 title="Dashboard"
@@ -39,7 +67,6 @@ export default function DashboardLayout({
     const { user, loading } = useAuth();
     const router = useRouter();
 
-    /* Auth guard — redirect in useEffect to avoid setState-during-render */
     useEffect(() => {
         if (!loading && !user) {
             router.push('/login');

@@ -1,4 +1,4 @@
-/* Dashboard Layout Styles */
+/* Dashboard Layout Styles — Dynamic width based on sidebar state */
 .dashboardLayout {
     display: flex;
     min-height: 100dvh;
@@ -10,6 +10,13 @@
     margin-left: var(--sidebar-width);
     padding-top: var(--topbar-height);
     transition: margin-left var(--duration-slow) var(--ease-out);
+    position: relative;
+    z-index: var(--z-base);
+}
+
+/* When sidebar is collapsed, content fills the space */
+:global(.sidebarIsCollapsed) .mainContent {
+    margin-left: 68px;
 }
 
 .pageContent {
@@ -18,7 +25,7 @@
     margin: 0 auto;
 }
 
-/* Background noise overlay */
+/* Background gradient overlay */
 .dashboardLayout::before {
     content: '';
     position: fixed;
@@ -32,11 +39,6 @@
             transparent 70%);
     pointer-events: none;
     z-index: 0;
-}
-
-.mainContent {
-    position: relative;
-    z-index: var(--z-base);
 }
 
 @media (max-width: 768px) {

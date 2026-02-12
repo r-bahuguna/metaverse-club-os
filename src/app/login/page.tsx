@@ -2,16 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Zap, Mail, Lock, Eye, EyeOff, Sparkles, UserPlus, LogIn } from 'lucide-react';
+import { Zap, Mail, Lock, Eye, EyeOff, Sparkles, LogIn } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function LoginPage() {
     const router = useRouter();
-    const { user, loading, error, signInWithEmail, registerWithEmail, signInAnonymously, clearError } = useAuth();
+    const { user, loading, error, signInWithEmail, signInAnonymously, clearError } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const [isRegister, setIsRegister] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
@@ -24,11 +23,7 @@ export default function LoginPage() {
         e.preventDefault();
         setSubmitting(true);
         clearError();
-        if (isRegister) {
-            await registerWithEmail(email, password);
-        } else {
-            await signInWithEmail(email, password);
-        }
+        await signInWithEmail(email, password);
         setSubmitting(false);
     }
 
@@ -213,23 +208,10 @@ export default function LoginPage() {
                             transition: 'all 0.2s ease',
                             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                         }}>
-                        {isRegister ? <UserPlus size={16} /> : <LogIn size={16} />}
-                        {submitting ? 'Please wait...' : (isRegister ? 'Create Owner Account' : 'Sign In')}
+                        <LogIn size={16} />
+                        {submitting ? 'Signing in...' : 'Sign In'}
                     </button>
                 </form>
-
-                <p style={{ textAlign: 'center', fontSize: 13, color: 'rgba(255,255,255,0.28)', marginTop: 20 }}>
-                    {isRegister ? 'Already have an account?' : 'First time setup?'}{' '}
-                    <button
-                        onClick={() => { setIsRegister(!isRegister); clearError(); }}
-                        style={{
-                            background: 'none', border: 'none', cursor: 'pointer',
-                            color: '#00f0ff', fontSize: 13, fontWeight: 500,
-                            textDecoration: 'underline', textUnderlineOffset: 2,
-                        }}>
-                        {isRegister ? 'Sign in' : 'Create Owner Account'}
-                    </button>
-                </p>
             </div>
 
             <style>{`
