@@ -4,3 +4,20 @@ runConfig:
   cpu: 1
   memoryMiB: 512
   concurrency: 80
+
+env:
+  - variable: FIREBASE_ADMIN_PROJECT_ID
+    value: risky-desires
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: FIREBASE_ADMIN_CLIENT_EMAIL
+    value: firebase-adminsdk-fbsvc@risky-desires.iam.gserviceaccount.com
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: FIREBASE_ADMIN_PRIVATE_KEY
+    secret: FIREBASE_ADMIN_PRIVATE_KEY
+    availability:
+      - BUILD
+      - RUNTIME

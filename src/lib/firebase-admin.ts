@@ -17,12 +17,12 @@ function getAdminApp(): App {
         return adminApp;
     }
 
-    const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.fb_project_id;
-    const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL || process.env.fb_client_email;
-    const privateKey = (process.env.FIREBASE_ADMIN_PRIVATE_KEY || process.env.fb_private_key)?.replace(/\\n/g, '\n');
+    const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+    const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n');
 
     if (!projectId || !clientEmail || !privateKey) {
-        throw new Error('Missing FIREBASE_ADMIN_* or fb_* environment variables');
+        throw new Error('Missing FIREBASE_ADMIN_* environment variables');
     }
 
     try {
