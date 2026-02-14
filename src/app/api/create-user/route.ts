@@ -5,7 +5,7 @@
    ========================================================================== */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth, adminDb } from '@/lib/firebase-admin';
+import { getAdminAuth, getAdminDb } from '@/lib/firebase-admin';
 
 function generateTempPassword(): string {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
@@ -25,6 +25,9 @@ export async function POST(req: NextRequest) {
         }
 
         const token = authHeader.split('Bearer ')[1];
+        const adminAuth = getAdminAuth(); // Lazy init
+        const adminDb = getAdminDb();     // Lazy init
+
         const decoded = await adminAuth.verifyIdToken(token);
 
         // Look up the caller's role from Firestore
