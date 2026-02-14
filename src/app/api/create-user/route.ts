@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
         /* ── Parse request body ── */
         const body = await req.json();
-        const { displayName, slName, slUuid, role } = body;
+        const { displayName, slName, slUuid, role, secondaryRoles } = body;
 
         if (!displayName || !slName || !role) {
             return NextResponse.json({ error: 'Missing required fields: displayName, slName, role' }, { status: 400 });
@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
             slName,
             slUuid: slUuid || '',
             role,
+            secondaryRoles: secondaryRoles || [],
             mustChangePassword: true,
             createdAt: now,
             createdBy: decoded.uid,
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest) {
             displayName,
             slName,
             role,
+            secondaryRoles,
         });
     } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Internal server error';
