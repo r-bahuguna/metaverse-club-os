@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
 import PageTransition from '@/components/layout/PageTransition';
+import OnboardingModal from '@/components/ui/OnboardingModal';
 import styles from './layout.module.css';
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
@@ -93,6 +94,7 @@ export default function DashboardLayout({
     return (
         <SettingsProvider>
             <RoleProvider>
+                <OnboardingModal />
                 <DashboardShell>{children}</DashboardShell>
             </RoleProvider>
         </SettingsProvider>

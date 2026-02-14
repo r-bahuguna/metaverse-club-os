@@ -24,6 +24,7 @@ export interface AppUser {
   createdAt?: string;
   createdBy?: string;
   onlineStatus?: OnlineStatus;
+  mustChangePassword?: boolean;
 }
 
 /** Staff online status */

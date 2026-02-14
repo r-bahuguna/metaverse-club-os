@@ -1,101 +1,194 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
-import {
-    ChevronLeft, ChevronRight, Plus, Sparkles, Check, X,
-    Clock, AlertTriangle, CalendarDays,
-} from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Calendar, Clock, Plus, Users, User, ArrowLeft, ArrowRight, Save, X, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
+import { db } from '@/lib/firebase';
+import { collection, query, where, getDocs, addDoc, doc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import GlassCard from '@/components/ui/GlassCard';
-import AnimatedCard from '@/components/ui/AnimatedCard';
-import { MOCK_SHIFTS, MOCK_PAIRINGS, MOCK_AVAILABILITY } from '@/lib/mock-data';
-import type { Shift, SchedulePairing, ShiftResponse } from '@/lib/types';
-import styles from './page.module.css';
+import StatusBadge from '@/components/ui/StatusBadge';
+import WheelPicker from '@/components/ui/WheelPicker';
+import DateRangePicker from '@/components/ui/DateRangePicker';
+import SetAvailabilityModal from '@/components/ui/SetAvailabilityModal';
+import { Shift, SchedulePairing, ShiftResponse, ShiftStatus, UserRole, AppUser } from '@/lib/types';
+import { ROLE_CONFIG } from '@/lib/constants';
 
-const TIME_SLOTS = ['18:00', '19:00', '20:00', '21:00', '22:00', '23:00', '00:00', '01:00', '02:00', '03:00'];
+/* ── Types for local state ── */
+type ViewMode = 'grid' | 'responses' | 'smart' | 'my-schedule' | 'availability';
 
-function getWeekDays(): { label: string; date: string; isToday: boolean }[] {
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - today.getDay() + 1);
-    return Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        const dateStr = d.toISOString().split('T')[0];
-        return {
-            label: d.toLocaleDateString('en', { weekday: 'short' }),
-            date: dateStr,
-            isToday: dateStr === today.toISOString().split('T')[0],
-        };
-    });
+/* ── Helper: Get start of week (Sunday) ── */
+function getStartOfWeek(date: Date) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day; // adjust when day is sunday
+    d.setDate(diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
 }
 
-function getShiftStyle(role: string): string {
-    switch (role) {
-        case 'dj': return styles.shiftDj;
-        case 'host': return styles.shiftHost;
-        case 'manager': return styles.shiftManager;
-        default: return styles.shiftDj;
-    }
+function addDays(date: Date, days: number) {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
 }
 
-const RESPONSE_COLORS: Record<ShiftResponse, { bg: string; color: string; label: string }> = {
-    pending: { bg: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', label: 'Pending' },
-    accepted: { bg: 'rgba(74, 222, 128, 0.1)', color: '#4ade80', label: 'Accepted' },
-    declined: { bg: 'rgba(255, 68, 68, 0.1)', color: '#ff4444', label: 'Declined' },
-    reschedule_requested: { bg: 'rgba(192, 132, 252, 0.1)', color: '#c084fc', label: 'Reschedule' },
-};
+function getDayName(date: Date) {
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
+}
+
+function formatDate(date: Date) {
+    return date.toISOString().split('T')[0];
+}
+
+/* ── Sub-components ── */
+function WeekNavigator({ currentWeek, onPrev, onNext }: { currentWeek: Date, onPrev: () => void, onNext: () => void }) {
+    const endOfWeek = addDays(currentWeek, 6);
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: 12, border: '1px solid var(--glass-border)' }}>
+            <button onClick={onPrev} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 4 }}><ArrowLeft size={16} /></button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'var(--text-primary)' }}>
+                <Calendar size={14} color="var(--neon-cyan)" />
+                <span>
+                    {currentWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    {' - '}
+                    {endOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                </span>
+            </div>
+            <button onClick={onNext} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 4 }}><ArrowRight size={16} /></button>
+        </div>
+    );
+}
 
 /* ── Add Shift Modal ── */
-function AddShiftModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function AddShiftModal({
+    open,
+    onClose,
+    onSave,
+    staffList
+}: {
+    open: boolean;
+    onClose: () => void;
+    onSave: (shift: Partial<Shift>) => Promise<void>;
+    staffList: AppUser[]
+}) {
+    const [selectedStaffId, setSelectedStaffId] = useState('');
+    const [startDate, setStartDate] = useState(new Date());
+    const [endDate, setEndDate] = useState(new Date(new Date().setHours(new Date().getHours() + 4)));
+    const [notes, setNotes] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    // Filter staff by role (DJ/Host/Manager)
+    const eligibleStaff = useMemo(() => staffList.filter(u => ['dj', 'host', 'manager'].includes(u.role)), [staffList]);
+
+    // When staff selected, auto-set role
+    const selectedStaff = staffList.find(s => s.uid === selectedStaffId);
+
+    async function handleSave() {
+        if (!selectedStaffId) return;
+        setSaving(true);
+        try {
+            await onSave({
+                staffId: selectedStaffId,
+                staffName: selectedStaff?.displayName || 'Unknown',
+                role: (selectedStaff?.role as any) || 'dj',
+                date: formatDate(startDate),
+                startTime: startDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                endTime: endDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                notes,
+                status: 'active',
+                response: 'pending'
+            });
+            onClose();
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setSaving(false);
+        }
+    }
+
     if (!open) return null;
+
     return (
         <div style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
+            position: 'fixed', inset: 0, zIndex: 999,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
-        }} onClick={onClose}>
+            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)'
+        }}>
             <div style={{
-                maxWidth: 420, width: '90%',
+                width: 500, maxWidth: '95%',
                 background: 'rgba(15, 15, 30, 0.95)',
                 border: '1px solid var(--glass-border)',
-                borderRadius: 16, padding: 24,
-            }} onClick={e => e.stopPropagation()}>
-                <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>Add Shift</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {['Staff Name', 'Date (YYYY-MM-DD)', 'Start Time', 'End Time', 'Notes'].map(lbl => (
-                        <div key={lbl}>
-                            <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{lbl}</label>
-                            <input style={{
-                                width: '100%', marginTop: 4, padding: '8px 12px',
-                                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
-                                borderRadius: 8, color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-                            }} />
-                        </div>
-                    ))}
+                borderRadius: 20, padding: 24,
+                boxShadow: '0 0 40px rgba(0,0,0,0.5)'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+                    <h3 style={{ fontSize: 18, fontWeight: 600 }}>Schedule Shift</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={20} /></button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Staff Picker */}
                     <div>
-                        <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Role</label>
-                        <select style={{
-                            width: '100%', marginTop: 4, padding: '8px 12px',
-                            background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
-                            borderRadius: 8, color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-                        }}>
-                            <option value="dj">DJ</option>
-                            <option value="host">Host</option>
-                            <option value="manager">Manager</option>
+                        <label style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Staff Member</label>
+                        <select
+                            value={selectedStaffId}
+                            onChange={e => setSelectedStaffId(e.target.value)}
+                            style={{
+                                width: '100%', padding: 12, borderRadius: 10,
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid var(--glass-border)',
+                                color: 'white', fontSize: 14, outline: 'none'
+                            }}
+                        >
+                            <option value="">Select Staff...</option>
+                            {eligibleStaff.map(s => (
+                                <option key={s.uid} value={s.uid}>
+                                    {s.displayName} ({ROLE_CONFIG[s.role]?.label || s.role})
+                                </option>
+                            ))}
                         </select>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                        <button onClick={onClose} style={{
-                            flex: 1, padding: 10, borderRadius: 8,
-                            background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
-                            color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13,
-                        }}>Cancel</button>
-                        <button onClick={onClose} style={{
-                            flex: 1, padding: 10, borderRadius: 8,
-                            background: 'rgba(0, 240, 255, 0.1)', border: '1px solid rgba(0, 240, 255, 0.3)',
-                            color: 'var(--neon-cyan)', cursor: 'pointer', fontSize: 13, fontWeight: 500,
-                        }}>Create Shift</button>
+
+                    {/* Date/Time Picker */}
+                    <DateRangePicker
+                        startDate={startDate}
+                        endDate={endDate}
+                        onChange={(s, e) => { setStartDate(s); setEndDate(e); }}
+                        isRange={true}
+                    />
+
+                    {/* Notes */}
+                    <div>
+                        <label style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Notes (Optional)</label>
+                        <textarea
+                            value={notes}
+                            onChange={e => setNotes(e.target.value)}
+                            placeholder="e.g. Neon Nights Theme"
+                            style={{
+                                width: '100%', padding: 12, borderRadius: 10,
+                                background: 'rgba(255,255,255,0.05)',
+                                border: '1px solid var(--glass-border)',
+                                color: 'white', fontSize: 14, outline: 'none',
+                                minHeight: 80, resize: 'vertical'
+                            }}
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                        <button onClick={onClose} style={{ flex: 1, padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>Cancel</button>
+                        <button
+                            onClick={handleSave}
+                            disabled={!selectedStaffId || saving}
+                            style={{
+                                flex: 1, padding: 12, borderRadius: 10,
+                                background: 'var(--neon-cyan)', border: 'none',
+                                color: 'black', fontWeight: 600, cursor: 'pointer',
+                                opacity: (!selectedStaffId || saving) ? 0.5 : 1
+                            }}
+                        >
+                            {saving ? 'Scheduling...' : 'Create Shift'}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -103,318 +196,307 @@ function AddShiftModal({ open, onClose }: { open: boolean; onClose: () => void }
     );
 }
 
+/* ── Main Page Component ── */
 export default function SchedulePage() {
-    const { can, currentRole } = useRole();
-    const weekDays = useMemo(() => getWeekDays(), []);
-    const [shifts, setShifts] = useState<Shift[]>(MOCK_SHIFTS);
-    const [pairings, setPairings] = useState<SchedulePairing[]>(MOCK_PAIRINGS);
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [activeTab, setActiveTab] = useState<'grid' | 'responses' | 'smart'>('grid');
+    const { appUser } = useAuth();
+    const { can } = useRole();
+    const [currentWeek, setCurrentWeek] = useState(getStartOfWeek(new Date()));
+    const [shifts, setShifts] = useState<Shift[]>([]);
+    const [staffList, setStaffList] = useState<AppUser[]>([]);
+    const [availability, setAvailability] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [viewMode, setViewMode] = useState<ViewMode>('grid');
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
 
-    const isManager = can('manager');
+    // Determine default view based on role
+    useEffect(() => {
+        if (appUser && !can('manager')) {
+            setViewMode('my-schedule');
+        }
+    }, [appUser, can]);
 
-    const getShiftsForCell = (date: string, timeSlot: string) => {
-        return shifts.filter(shift => {
-            if (shift.date !== date) return false;
-            const slotH = parseInt(timeSlot.split(':')[0]);
-            const startH = parseInt(shift.startTime.split(':')[0]);
-            const endH = parseInt(shift.endTime.split(':')[0]);
-            if (endH > startH) return slotH >= startH && slotH < endH;
-            return slotH >= startH || slotH < endH;
+    /* ── Fetch Data ── */
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            // Fetch users for staff picker (if manager)
+            if (can('manager')) {
+                const usersSnap = await getDocs(query(collection(db, 'users')));
+                const users = usersSnap.docs.map(d => ({ uid: d.id, ...d.data() } as AppUser));
+                setStaffList(users);
+            }
+
+            // Fetch shifts (real Firestore query)
+            const shiftsSnap = await getDocs(collection(db, 'shifts'));
+            const fetchedShifts = shiftsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Shift));
+            setShifts(fetchedShifts);
+
+            // Fetch availability (if staff view)
+            if (!can('manager') && appUser) {
+                const availSnap = await getDocs(query(collection(db, 'availability'), where('staffId', '==', appUser.uid)));
+                const fetchedAvail = availSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                setAvailability(fetchedAvail);
+            }
+
+        } catch (e) {
+            console.error('Failed to fetch schedule data:', e);
+        } finally {
+            setLoading(false);
+        }
+    }, [can, appUser]);
+
+    useEffect(() => { fetchData(); }, [fetchData]);
+
+    /* ── Handlers ── */
+    const handlePrevWeek = () => setCurrentWeek(prev => addDays(prev, -7));
+    const handleNextWeek = () => setCurrentWeek(prev => addDays(prev, 7));
+
+    const handleCreateShift = async (shiftData: Partial<Shift>) => {
+        if (!appUser) return;
+
+        // Add to Firestore
+        const docRef = await addDoc(collection(db, 'shifts'), {
+            ...shiftData,
+            createdBy: appUser.uid,
+            createdAt: new Date().toISOString()
         });
+
+        // Optimistic update
+        const newShift = { id: docRef.id, ...shiftData } as Shift;
+        setShifts(prev => [...prev, newShift]);
     };
 
-    /* Staff-side: respond to a shift */
-    function handleShiftResponse(shiftId: string, response: ShiftResponse) {
-        setShifts(prev => prev.map(s => s.id === shiftId ? { ...s, response } : s));
-    }
+    /* ── Render Grid ── */
+    const renderGrid = () => {
+        const weekDays = Array.from({ length: 7 }, (_, i) => addDays(currentWeek, i));
+        const hours = Array.from({ length: 24 }, (_, i) => i); // 0-23 hours
 
-    /* Management-side: approve/reject pairing */
-    function handlePairingDecision(pairingId: string, status: 'approved' | 'rejected') {
-        setPairings(prev => prev.map(p => p.id === pairingId ? { ...p, status } : p));
-    }
-
-    const tabs = isManager
-        ? [
-            { id: 'grid' as const, label: 'Schedule Grid' },
-            { id: 'responses' as const, label: 'Shift Responses' },
-            { id: 'smart' as const, label: 'Smart Schedule' },
-        ]
-        : [
-            { id: 'grid' as const, label: 'My Schedule' },
-            { id: 'responses' as const, label: 'My Shifts' },
-        ];
-
-    return (
-        <div className={styles.schedulePage}>
-            {/* Header */}
-            <div className={styles.header}>
-                <div className={styles.headerLeft}>
-                    <h1 className={styles.title}>
-                        <CalendarDays size={24} style={{ color: 'var(--neon-purple)' }} />
-                        Schedule
-                    </h1>
-                </div>
-                {isManager && (
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: 6,
-                            padding: '8px 16px', borderRadius: 8,
-                            border: '1px solid rgba(0, 240, 255, 0.25)',
-                            background: 'rgba(0, 240, 255, 0.06)',
-                            color: 'var(--neon-cyan)', fontSize: 13, fontWeight: 500,
-                            cursor: 'pointer',
-                        }}
-                    >
-                        <Plus size={16} /> Add Shift
-                    </button>
-                )}
-            </div>
-
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, marginBottom: 'var(--space-4)' }}>
-                {tabs.map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        style={{
-                            padding: '8px 16px', borderRadius: 8,
-                            border: activeTab === tab.id ? '1px solid var(--neon-cyan)' : '1px solid var(--glass-border)',
-                            background: activeTab === tab.id ? 'rgba(0, 240, 255, 0.08)' : 'transparent',
-                            color: activeTab === tab.id ? 'var(--neon-cyan)' : 'var(--text-secondary)',
-                            fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                        }}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* ═══ TAB: Schedule Grid ═══ */}
-            {activeTab === 'grid' && (
-                <>
-                    <div className={styles.weekNav}>
-                        <button className={styles.weekNavBtn}><ChevronLeft size={16} /></button>
-                        <span className={styles.weekLabel}>
-                            {weekDays[0]?.date && new Date(weekDays[0].date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
-                            {' – '}
-                            {weekDays[6]?.date && new Date(weekDays[6].date).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
-                        <button className={styles.weekNavBtn}><ChevronRight size={16} /></button>
-                    </div>
-                    <GlassCard>
-                        <div className={styles.scheduleGrid}>
-                            <div className={styles.gridHeader}></div>
-                            {weekDays.map(day => (
-                                <div key={day.date} className={`${styles.gridHeader} ${day.isToday ? styles.gridHeaderToday : ''}`}>
-                                    {day.label}<br />
-                                    <span style={{ fontSize: 14, fontWeight: 600 }}>{new Date(day.date).getDate()}</span>
-                                </div>
-                            ))}
-                            {TIME_SLOTS.map(time => (
-                                <React.Fragment key={time}>
-                                    <div className={styles.timeLabel}>{time}</div>
-                                    {weekDays.map(day => {
-                                        const startsHere = getShiftsForCell(day.date, time).filter(s => s.startTime === time);
-                                        return (
-                                            <div key={`${day.date}-${time}`} className={styles.gridCell}>
-                                                {startsHere.map(shift => {
-                                                    const resp = RESPONSE_COLORS[shift.response];
-                                                    return (
-                                                        <div key={shift.id} className={`${styles.shiftBlock} ${getShiftStyle(shift.role)}`}>
-                                                            <div className={styles.shiftName}>{shift.staffName}</div>
-                                                            <div className={styles.shiftTime}>{shift.startTime}–{shift.endTime}</div>
-                                                            <span style={{
-                                                                fontSize: 8, padding: '1px 4px', borderRadius: 3,
-                                                                background: resp.bg, color: resp.color,
-                                                                textTransform: 'uppercase', letterSpacing: '0.05em',
-                                                            }}>{resp.label}</span>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        );
-                                    })}
-                                </React.Fragment>
-                            ))}
-                        </div>
-                    </GlassCard>
-                    <div className={styles.legend}>
-                        <div className={styles.legendItem}><span className={styles.legendDot} style={{ background: 'var(--neon-purple)' }} />DJ</div>
-                        <div className={styles.legendItem}><span className={styles.legendDot} style={{ background: 'var(--neon-pink)' }} />Host</div>
-                        <div className={styles.legendItem}><span className={styles.legendDot} style={{ background: 'var(--neon-green)' }} />Manager</div>
-                    </div>
-                </>
-            )}
-
-            {/* ═══ TAB: Shift Responses ═══ */}
-            {activeTab === 'responses' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                    {shifts.filter(s => s.status === 'scheduled').map(shift => {
-                        const resp = RESPONSE_COLORS[shift.response];
+        return (
+            <div style={{ overflowX: 'auto', paddingBottom: 20 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '60px repeat(7, minmax(140px, 1fr))', gap: 1 }}>
+                    {/* Header Row */}
+                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: 10, borderRadius: '8px 0 0 8px' }} />
+                    {weekDays.map(d => {
+                        const isToday = formatDate(d) === formatDate(new Date());
                         return (
-                            <AnimatedCard key={shift.id} index={0}>
-                                <GlassCard>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                {shift.staffName}
-                                                <span style={{
-                                                    marginLeft: 8, fontSize: 10, padding: '2px 8px', borderRadius: 4,
-                                                    background: resp.bg, color: resp.color,
-                                                    textTransform: 'uppercase', letterSpacing: '0.06em',
-                                                }}>{resp.label}</span>
-                                            </div>
-                                            <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
-                                                <Clock size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                                                {shift.date} · {shift.startTime}–{shift.endTime}
-                                            </div>
-                                            {shift.notes && (
-                                                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>{shift.notes}</div>
-                                            )}
+                            <div key={d.toISOString()} style={{
+                                background: isToday ? 'rgba(0, 240, 255, 0.1)' : 'rgba(255,255,255,0.03)',
+                                padding: '12px 6px', textAlign: 'center',
+                                borderRadius: 6, marginBottom: 4,
+                                border: isToday ? '1px solid rgba(0, 240, 255, 0.3)' : 'none'
+                            }}>
+                                <div style={{ fontSize: 11, color: isToday ? 'var(--neon-cyan)' : 'var(--text-muted)', textTransform: 'uppercase' }}>{getDayName(d)}</div>
+                                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{d.getDate()}</div>
+                            </div>
+                        );
+                    })}
+
+                    {/* Time Grid */}
+                    {hours.map(h => {
+                        const timeLabel = `${h.toString().padStart(2, '0')}:00`;
+                        return (
+                            <React.Fragment key={h}>
+                                {/* Time Label */}
+                                <div style={{
+                                    padding: '10px 4px', fontSize: 11, color: 'var(--text-muted)',
+                                    textAlign: 'right', marginTop: -10
+                                }}>
+                                    {timeLabel}
+                                </div>
+
+                                {/* Day Cells */}
+                                {weekDays.map(day => {
+                                    const dateStr = formatDate(day);
+                                    // Find shifts for this cell
+                                    const cellShifts = shifts.filter(s => {
+                                        if (s.date !== dateStr) return false;
+                                        const startH = parseInt(s.startTime.split(':')[0]);
+                                        // Simple duration logic for display
+                                        return startH === h;
+                                    });
+
+                                    return (
+                                        <div key={day.toISOString() + h} style={{
+                                            background: 'rgba(255,255,255,0.02)',
+                                            borderLeft: '1px solid rgba(255,255,255,0.03)',
+                                            borderBottom: '1px solid rgba(255,255,255,0.03)',
+                                            minHeight: 50, position: 'relative'
+                                        }}>
+                                            {cellShifts.map(s => (
+                                                <div key={s.id} style={{
+                                                    position: 'absolute', top: 2, left: 2, right: 2,
+                                                    background: ROLE_CONFIG[s.role]?.color ? `var(${ROLE_CONFIG[s.role].color})` : '#444',
+                                                    padding: '4px 6px', borderRadius: 4,
+                                                    fontSize: 11, color: 'black', fontWeight: 600,
+                                                    zIndex: 10, boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                                    cursor: 'pointer'
+                                                }}>
+                                                    {s.staffName}
+                                                    <div style={{ fontSize: 9, opacity: 0.8 }}>{s.startTime} - {s.endTime}</div>
+                                                </div>
+                                            ))}
                                         </div>
-                                        {/* Staff sees Accept/Decline, Management sees status */}
-                                        {!isManager && shift.response === 'pending' ? (
-                                            <div style={{ display: 'flex', gap: 6 }}>
-                                                <button onClick={() => handleShiftResponse(shift.id, 'accepted')} style={{
-                                                    padding: '6px 12px', borderRadius: 6,
-                                                    background: 'rgba(74, 222, 128, 0.1)', border: '1px solid rgba(74, 222, 128, 0.3)',
-                                                    color: '#4ade80', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                                                }}><Check size={14} /> Accept</button>
-                                                <button onClick={() => handleShiftResponse(shift.id, 'declined')} style={{
-                                                    padding: '6px 12px', borderRadius: 6,
-                                                    background: 'rgba(255, 68, 68, 0.1)', border: '1px solid rgba(255, 68, 68, 0.3)',
-                                                    color: '#ff4444', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                                                }}><X size={14} /> Decline</button>
-                                                <button onClick={() => handleShiftResponse(shift.id, 'reschedule_requested')} style={{
-                                                    padding: '6px 12px', borderRadius: 6,
-                                                    background: 'rgba(192, 132, 252, 0.1)', border: '1px solid rgba(192, 132, 252, 0.3)',
-                                                    color: '#c084fc', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                                                }}><AlertTriangle size={14} /> Reschedule</button>
-                                            </div>
-                                        ) : (
-                                            <span style={{
-                                                fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                                                background: resp.bg, color: resp.color,
-                                                fontWeight: 500,
-                                            }}>{resp.label}</span>
-                                        )}
-                                    </div>
-                                </GlassCard>
-                            </AnimatedCard>
+                                    );
+                                })}
+                            </React.Fragment>
                         );
                     })}
                 </div>
-            )}
+            </div>
+        );
+    };
 
-            {/* ═══ TAB: Smart Schedule ═══ */}
-            {activeTab === 'smart' && isManager && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
-                    {/* Auto-generated pairings */}
-                    <GlassCard neon="purple">
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-                            <h2 style={{
-                                fontFamily: 'var(--font-mono)', fontSize: 'var(--text-md)', fontWeight: 600,
-                                color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8,
-                                textTransform: 'uppercase', letterSpacing: '0.04em',
-                            }}>
-                                <Sparkles size={18} color="#c084fc" /> Proposed Pairings
-                            </h2>
-                            <span style={{
-                                fontSize: 10, color: 'var(--text-muted)',
-                                background: 'rgba(192, 132, 252, 0.08)',
-                                padding: '3px 8px', borderRadius: 4,
-                            }}>
-                                Smart Scheduler · Greedy Heuristic
-                            </span>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-                            {pairings.map(pair => (
-                                <div key={pair.id} style={{
-                                    display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
-                                    padding: 'var(--space-3) var(--space-4)',
-                                    background: 'rgba(255,255,255,0.02)',
-                                    border: '1px solid rgba(255,255,255,0.04)',
-                                    borderRadius: 10,
-                                }}>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                                            {pair.eventName}
-                                        </div>
-                                        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 3 }}>
-                                            {pair.date}
-                                        </div>
-                                        <div style={{ display: 'flex', gap: 12, marginTop: 6 }}>
-                                            <span style={{ fontSize: 11, color: 'var(--neon-purple)' }}>🎧 {pair.djName}</span>
-                                            <span style={{ fontSize: 11, color: 'var(--neon-pink)' }}>🎤 {pair.hostName}</span>
-                                        </div>
-                                    </div>
-                                    {pair.status === 'proposed' ? (
-                                        <div style={{ display: 'flex', gap: 6 }}>
-                                            <button onClick={() => handlePairingDecision(pair.id, 'approved')} style={{
-                                                padding: '6px 12px', borderRadius: 6,
-                                                background: 'rgba(74, 222, 128, 0.1)', border: '1px solid rgba(74, 222, 128, 0.3)',
-                                                color: '#4ade80', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                                            }}><Check size={14} /> Approve</button>
-                                            <button onClick={() => handlePairingDecision(pair.id, 'rejected')} style={{
-                                                padding: '6px 12px', borderRadius: 6,
-                                                background: 'rgba(255, 68, 68, 0.1)', border: '1px solid rgba(255, 68, 68, 0.3)',
-                                                color: '#ff4444', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                                            }}><X size={14} /> Reject</button>
-                                        </div>
-                                    ) : (
-                                        <span style={{
-                                            fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                                            background: pair.status === 'approved' ? 'rgba(74,222,128,0.1)' : 'rgba(255,68,68,0.1)',
-                                            color: pair.status === 'approved' ? '#4ade80' : '#ff4444',
-                                            fontWeight: 500,
-                                        }}>
-                                            {pair.status === 'approved' ? 'Approved' : 'Rejected'}
-                                        </span>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </GlassCard>
-
-                    {/* Availability Overview */}
-                    <GlassCard>
-                        <h2 style={{
-                            fontFamily: 'var(--font-mono)', fontSize: 'var(--text-md)', fontWeight: 600,
-                            color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8,
-                            marginBottom: 'var(--space-4)',
-                            textTransform: 'uppercase', letterSpacing: '0.04em',
-                        }}>
-                            Staff Availability
-                        </h2>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--space-3)' }}>
-                            {MOCK_AVAILABILITY.map(avail => (
-                                <div key={avail.id} style={{
-                                    padding: 'var(--space-3)',
-                                    background: 'rgba(255,255,255,0.02)',
-                                    border: '1px solid rgba(255,255,255,0.04)',
-                                    borderRadius: 8,
-                                }}>
-                                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                                        {avail.staffName}
-                                    </div>
-                                    <div style={{
-                                        fontSize: 11, color: avail.role === 'dj' ? 'var(--neon-purple)' : 'var(--neon-pink)',
-                                        textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 2,
-                                    }}>{avail.role}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 6 }}>
-                                        {avail.date} · {avail.startTime}–{avail.endTime}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </GlassCard>
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+            {/* Header / Controls */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                    <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700 }}>Schedule</h1>
+                    <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Manage shifts and events</p>
                 </div>
+
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <WeekNavigator currentWeek={currentWeek} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+
+                    {can('manager') && (
+                        <button
+                            onClick={() => setIsAddModalOpen(true)}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                padding: '8px 16px', borderRadius: 10,
+                                background: 'var(--neon-cyan)', border: 'none',
+                                color: 'black', fontWeight: 600, fontSize: 13,
+                                cursor: 'pointer', boxShadow: '0 0 15px rgba(0, 240, 255, 0.3)'
+                            }}
+                        >
+                            <Plus size={16} /> Add Shift
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* View Tabs */}
+            <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.03)', padding: 4, borderRadius: 10, width: 'fit-content' }}>
+                {can('manager') && (
+                    <>
+                        {['grid', 'responses', 'smart'].map(m => (
+                            <button key={m}
+                                onClick={() => setViewMode(m as ViewMode)}
+                                style={{
+                                    padding: '6px 16px', borderRadius: 8, border: 'none',
+                                    background: viewMode === m ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                    color: viewMode === m ? 'white' : 'var(--text-muted)',
+                                    fontSize: 13, fontWeight: 500, cursor: 'pointer', textTransform: 'capitalize'
+                                }}
+                            >
+                                {m}
+                            </button>
+                        ))}
+                    </>
+                )}
+                {!can('manager') && (
+                    <>
+                        {['my-schedule', 'availability'].map(m => (
+                            <button key={m}
+                                onClick={() => setViewMode(m as ViewMode)}
+                                style={{
+                                    padding: '6px 16px', borderRadius: 8, border: 'none',
+                                    background: viewMode === m ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                    color: viewMode === m ? 'white' : 'var(--text-muted)',
+                                    fontSize: 13, fontWeight: 500, cursor: 'pointer', textTransform: 'capitalize'
+                                }}
+                            >
+                                {m.replace('-', ' ')}
+                            </button>
+                        ))}
+                    </>
+                )}
+            </div>
+
+            {/* Content Area */}
+            {loading ? (
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading schedule...</div>
+            ) : (
+                <GlassCard>
+                    <div style={{ minHeight: 400 }}>
+                        {viewMode === 'grid' && renderGrid()}
+                        {viewMode === 'responses' && <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>Shift Responses UI Coming Soon</div>}
+                        {viewMode === 'smart' && <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>Smart Scheduler UI Coming Soon</div>}
+                        {viewMode === 'my-schedule' && (
+                            <div style={{ padding: 20 }}>
+                                <h3 style={{ marginBottom: 16 }}>My Upcoming Shifts</h3>
+                                {shifts.filter(s => s.staffId === appUser?.uid).length === 0 ? (
+                                    <p style={{ color: 'var(--text-muted)' }}>No shifts scheduled.</p>
+                                ) : (
+                                    <div style={{ display: 'grid', gap: 10 }}>
+                                        {shifts.filter(s => s.staffId === appUser?.uid).map(s => (
+                                            <div key={s.id} style={{ padding: 12, background: 'rgba(255,255,255,0.05)', borderRadius: 8 }}>
+                                                <div style={{ fontWeight: 600 }}>{s.date} @ {s.startTime} - {s.endTime}</div>
+                                                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.role.toUpperCase()} • {s.notes || 'No notes'}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {viewMode === 'availability' && (
+                            <div style={{ padding: 20 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                                    <h3>My Availability</h3>
+                                    <button
+                                        onClick={() => setIsAvailabilityModalOpen(true)}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: 6,
+                                            padding: '8px 16px', borderRadius: 8,
+                                            background: 'var(--neon-cyan)', border: 'none',
+                                            color: 'black', fontWeight: 600, fontSize: 13, cursor: 'pointer'
+                                        }}
+                                    >
+                                        <Plus size={16} /> Set Availability
+                                    </button>
+                                </div>
+                                {availability.length === 0 ? (
+                                    <p style={{ color: 'var(--text-muted)' }}>No availability set.</p>
+                                ) : (
+                                    <div style={{ display: 'grid', gap: 10 }}>
+                                        {availability.map(a => (
+                                            <div key={a.id} style={{ padding: 12, background: 'rgba(255,255,255,0.05)', borderRadius: 8, display: 'flex', justifyContent: 'space-between' }}>
+                                                <div>
+                                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                                                        {a.type === 'single' && a.startDate}
+                                                        {a.type === 'range' && `${a.startDate} to ${a.endDate}`}
+                                                        {a.type === 'recurring' && `Recurring: ${a.recurringDays.length} days/week`}
+                                                    </div>
+                                                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                                                        {a.startTime} - {a.endTime}
+                                                    </div>
+                                                </div>
+                                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{a.type}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </GlassCard>
             )}
 
-            <AddShiftModal open={showAddModal} onClose={() => setShowAddModal(false)} />
+            {/* Add Shift Modal */}
+            <AddShiftModal
+                open={isAddModalOpen}
+                onClose={() => setIsAddModalOpen(false)}
+                onSave={handleCreateShift}
+                staffList={staffList}
+            />
+
+            {/* Set Availability Modal */}
+            <SetAvailabilityModal
+                open={isAvailabilityModalOpen}
+                onClose={() => setIsAvailabilityModalOpen(false)}
+                onSave={fetchData}
+            />
         </div>
     );
 }

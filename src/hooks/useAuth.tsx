@@ -28,6 +28,7 @@ interface AuthContextValue {
     signOut: () => Promise<void>;
     resetPassword: (email: string) => Promise<void>;
     clearError: () => void;
+    refreshAppUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -42,6 +43,7 @@ const AuthContext = createContext<AuthContextValue>({
     signOut: async () => { },
     resetPassword: async () => { },
     clearError: () => { },
+    refreshAppUser: async () => { },
 });
 
 export function useAuth() {
@@ -64,6 +66,7 @@ async function fetchAppUser(uid: string): Promise<AppUser | null> {
             createdAt: data.createdAt,
             createdBy: data.createdBy,
             onlineStatus: data.onlineStatus,
+            mustChangePassword: data.mustChangePassword ?? false,
         };
     } catch {
         console.warn('[useAuth] Failed to fetch user document for', uid);
@@ -151,12 +154,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const clearError = useCallback(() => setError(null), []);
 
+    /* Re-fetch Firestore profile (e.g. after onboarding password change) */
+    const refreshAppUser = useCallback(async () => {
+        if (firebaseUser && !firebaseUser.isAnonymous) {
+            const profile = await fetchAppUser(firebaseUser.uid);
+            setAppUser(profile);
+        }
+    }, [firebaseUser]);
+
     return (
         <AuthContext.Provider value={{
             firebaseUser, appUser, loading, error,
             isAnonymous, isSuperAdmin,
             signInWithEmail, signInAnonymously,
             signOut, resetPassword, clearError,
+            refreshAppUser,
         }}>
             {children}
         </AuthContext.Provider>

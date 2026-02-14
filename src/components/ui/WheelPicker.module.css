@@ -1,0 +1,75 @@
+.wheelPicker {
+    position: relative;
+    height: 120px;
+    width: 100%;
+    overflow: hidden;
+    mask-image: linear-gradient(to bottom,
+            transparent 0%,
+            rgba(0, 0, 0, 1) 20%,
+            rgba(0, 0, 0, 1) 80%,
+            transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom,
+            transparent 0%,
+            rgba(0, 0, 0, 1) 20%,
+            rgba(0, 0, 0, 1) 80%,
+            transparent 100%);
+    cursor: grab;
+    user-select: none;
+}
+
+.wheelPicker:active {
+    cursor: grabbing;
+}
+
+/* The selection highlight bar in the middle */
+.highlight {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 32px;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.04);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.scroller {
+    height: 100%;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE/Edge */
+    padding-top: 44px;
+    /* (120px - 32px) / 2 */
+    padding-bottom: 44px;
+}
+
+.scroller::-webkit-scrollbar {
+    display: none;
+}
+
+.item {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    scroll-snap-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+/* Active item receives neon glow */
+.itemActive {
+    color: var(--neon-cyan);
+    font-weight: 600;
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+    transform: scale(1.1);
+}
