@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, Calendar, Clock, Loader2, Save, Upload } from 'lucide-react';
 import DateRangePicker from './DateRangePicker';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,14 +14,15 @@ interface AddEventModalProps {
     onClose: () => void;
     onSave?: () => void;
     staffList: AppUser[];
+    eventToEdit?: any;
 }
 
-export default function AddEventModal({ open, onClose, onSave, staffList }: AddEventModalProps) {
+export default function AddEventModal({ open, onClose, onSave, staffList, eventToEdit }: AddEventModalProps) {
     const { appUser } = useAuth();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [genre, setGenre] = useState('');
-    const [imageUrl, setImageUrl] = useState(''); // Placeholder for now
+    const [imageUrl, setImageUrl] = useState('');
 
     const [startDate, setStartDate] = useState(new Date());
     const [endDate, setEndDate] = useState(new Date(new Date().setHours(new Date().getHours() + 2)));
@@ -30,11 +31,50 @@ export default function AddEventModal({ open, onClose, onSave, staffList }: AddE
     const [hostId, setHostId] = useState('');
 
     const [recurring, setRecurring] = useState(false);
+    const [createShifts, setCreateShifts] = useState(false);
     const [saving, setSaving] = useState(false);
 
     // Filter staff
     const djs = useMemo(() => staffList.filter(u => ['dj', 'manager', 'owner', 'super_admin'].includes(u.role)), [staffList]);
     const hosts = useMemo(() => staffList.filter(u => ['host', 'manager', 'owner', 'super_admin'].includes(u.role)), [staffList]);
+
+    // Pre-fill for Edit Mode
+    useEffect(() => {
+        if (open && eventToEdit) {
+            setName(eventToEdit.name);
+            setDescription(eventToEdit.description);
+            setGenre(eventToEdit.genre || '');
+            setImageUrl(eventToEdit.imageUrl || '');
+            setDjId(eventToEdit.djId || '');
+            setHostId(eventToEdit.hostId || '');
+            setRecurring(eventToEdit.isRecurring || false);
+
+            // Reconstruct dates
+            const start = new Date(`${eventToEdit.date}T${eventToEdit.startTime}`);
+            if (!isNaN(start.getTime())) {
+                setStartDate(start);
+                if (eventToEdit.endTime) {
+                    const [h, m] = eventToEdit.endTime.split(':');
+                    const e = new Date(start);
+                    e.setHours(parseInt(h), parseInt(m));
+                    if (e < start) e.setDate(e.getDate() + 1); // Crosses midnight
+                    setEndDate(e);
+                }
+            }
+        } else if (open && !eventToEdit) {
+            // Reset for Add Mode
+            setName('');
+            setDescription('');
+            setGenre('');
+            setImageUrl('');
+            setDjId('');
+            setHostId('');
+            setRecurring(false);
+            setCreateShifts(false);
+            setStartDate(new Date());
+            setEndDate(new Date(new Date().setHours(new Date().getHours() + 2)));
+        }
+    }, [open, eventToEdit]);
 
     if (!open) return null;
 
@@ -42,7 +82,7 @@ export default function AddEventModal({ open, onClose, onSave, staffList }: AddE
         if (!appUser || !name) return;
         setSaving(true);
         try {
-            await addDoc(collection(db, 'events'), {
+            const eventData = {
                 name,
                 description,
                 genre,
@@ -55,9 +95,49 @@ export default function AddEventModal({ open, onClose, onSave, staffList }: AddE
                 hostId,
                 hostName: staffList.find(s => s.uid === hostId)?.displayName || '',
                 isRecurring: recurring,
-                createdBy: appUser.uid,
-                createdAt: new Date().toISOString()
-            });
+                updatedAt: new Date().toISOString(),
+                ...(eventToEdit ? {} : { createdBy: appUser.uid, createdAt: new Date().toISOString() })
+            };
+
+            if (eventToEdit) {
+                // Update existing
+                await updateDoc(doc(db, 'events', eventToEdit.id), eventData);
+            } else {
+                // Create new
+                await addDoc(collection(db, 'events'), eventData);
+            }
+
+            // Create Shifts if requested (and not editing)
+            if (createShifts && !eventToEdit) {
+                const commonShiftData = {
+                    date: eventData.date,
+                    startTime: eventData.startTime,
+                    endTime: eventData.endTime,
+                    status: 'active',
+                    response: 'pending',
+                    notes: `Event: ${name}`,
+                    createdBy: appUser.uid,
+                    createdAt: new Date().toISOString()
+                };
+
+                if (djId) {
+                    await addDoc(collection(db, 'shifts'), {
+                        ...commonShiftData,
+                        staffId: djId,
+                        staffName: eventData.djName,
+                        role: 'dj'
+                    });
+                }
+                if (hostId) {
+                    await addDoc(collection(db, 'shifts'), {
+                        ...commonShiftData,
+                        staffId: hostId,
+                        staffName: eventData.hostName,
+                        role: 'host'
+                    });
+                }
+            }
+
             onSave?.();
             onClose();
         } catch (e) {
@@ -82,7 +162,7 @@ export default function AddEventModal({ open, onClose, onSave, staffList }: AddE
                 maxHeight: '90vh', overflowY: 'auto'
             }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 18, fontWeight: 600 }}>Create New Event</h3>
+                    <h3 style={{ fontSize: 18, fontWeight: 600 }}>{eventToEdit ? 'Edit Event' : 'Create New Event'}</h3>
                     <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}><X size={20} /></button>
                 </div>
 
@@ -190,15 +270,33 @@ export default function AddEventModal({ open, onClose, onSave, staffList }: AddE
                         </div>
                     </div>
 
-                    {/* Recurring Checkbox */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <input
-                            type="checkbox"
-                            checked={recurring}
-                            onChange={e => setRecurring(e.target.checked)}
-                            style={{ width: 16, height: 16 }}
-                        />
-                        <label style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Recurring Event</label>
+                    {/* Recurring & Shift Creation */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                                type="checkbox"
+                                checked={recurring}
+                                onChange={e => setRecurring(e.target.checked)}
+                                style={{ width: 16, height: 16 }}
+                            />
+                            <label style={{ fontSize: 14, color: 'var(--text-secondary)' }}>Recurring Event</label>
+                        </div>
+
+                        {!eventToEdit && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <input
+                                    type="checkbox"
+                                    checked={createShifts}
+                                    onChange={e => setCreateShifts(e.target.checked)}
+                                    // Disable if no staff selected
+                                    disabled={!djId && !hostId}
+                                    style={{ width: 16, height: 16 }}
+                                />
+                                <label style={{ fontSize: 14, color: (!djId && !hostId) ? 'var(--text-muted)' : 'var(--text-secondary)' }}>
+                                    Automatically create shifts for DJ/Host
+                                </label>
+                            </div>
+                        )}
                     </div>
 
                     {/* Save Button */}
@@ -214,10 +312,11 @@ export default function AddEventModal({ open, onClose, onSave, staffList }: AddE
                         }}
                     >
                         {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                        Create Event
+                        {eventToEdit ? 'Update Event' : 'Create Event'}
                     </button>
                 </div>
             </div>
         </div>
     );
 }
+
