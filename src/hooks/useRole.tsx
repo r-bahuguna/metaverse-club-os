@@ -49,8 +49,12 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
     }, [isSuperAdmin]);
 
     const can = useCallback((requiredRole: UserRole) => {
-        return hasPermission(resolvedRole, requiredRole);
-    }, [resolvedRole]);
+        // Check primary role
+        if (hasPermission(resolvedRole, requiredRole)) return true;
+        // Check secondary roles
+        if (appUser?.secondaryRoles?.some(r => hasPermission(r, requiredRole))) return true;
+        return false;
+    }, [resolvedRole, appUser]);
 
     const isStaff = hasPermission(resolvedRole, 'host');
     const isManagement = hasPermission(resolvedRole, 'manager');

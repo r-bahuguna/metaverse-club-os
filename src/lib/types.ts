@@ -19,6 +19,7 @@ export interface AppUser {
   email: string;
   displayName: string;
   role: UserRole;
+  secondaryRoles?: UserRole[];
   slName?: string;
   slUuid?: string;
   createdAt?: string;

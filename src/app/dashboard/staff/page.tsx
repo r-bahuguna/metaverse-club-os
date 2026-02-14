@@ -47,216 +47,8 @@ const statusVariant: Record<OnlineStatus, 'online' | 'away' | 'offline'> = {
     offline: 'offline',
 };
 
-/* ── Add Staff Modal ── */
-function AddStaffModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
-    const { firebaseUser } = useAuth();
-    const [displayName, setDisplayName] = useState('');
-    const [slName, setSlName] = useState('');
-    const [slUuid, setSlUuid] = useState('');
-    const [role, setRole] = useState<'dj' | 'host' | 'manager' | 'general_manager'>('dj');
-    const [state, setState] = useState<'form' | 'creating' | 'success' | 'error'>('form');
-    const [tempPassword, setTempPassword] = useState('');
-    const [copied, setCopied] = useState(false);
-    const [errMsg, setErrMsg] = useState('');
 
-    function reset() {
-        setDisplayName('');
-        setSlName('');
-        setSlUuid('');
-        setRole('dj');
-        setState('form');
-        setTempPassword('');
-        setCopied(false);
-        setErrMsg('');
-    }
-
-    function handleClose() {
-        reset();
-        onClose();
-    }
-
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
-        setState('creating');
-        setErrMsg('');
-
-        try {
-            const token = await firebaseUser?.getIdToken();
-            const res = await fetch('/api/create-user', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ displayName, slName, slUuid, role }),
-            });
-
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Failed to create user');
-
-            setTempPassword(data.tempPassword);
-            setState('success');
-            onCreated();
-        } catch (err: unknown) {
-            setErrMsg(err instanceof Error ? err.message : 'Failed to create user');
-            setState('error');
-        }
-    }
-
-    async function handleCopy() {
-        const text = `Username: ${slName}\nTemporary Password: ${tempPassword}`;
-        await navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-    }
-
-    if (!open) return null;
-
-    return (
-        <div style={{
-            position: 'fixed', inset: 0, zIndex: 9999,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
-        }} onClick={handleClose}>
-            <div style={{
-                maxWidth: 440, width: '90%',
-                background: 'rgba(15, 15, 30, 0.95)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: 20, padding: 28,
-            }} onClick={e => e.stopPropagation()}>
-
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                    <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>
-                        {state === 'success' ? '✅ Staff Created' : 'Add Staff Member'}
-                    </h3>
-                    <button onClick={handleClose} style={{
-                        background: 'none', border: 'none', color: 'var(--text-muted)',
-                        cursor: 'pointer', padding: 4,
-                    }}>
-                        <X size={18} />
-                    </button>
-                </div>
-
-                {/* Success State — show temp credentials */}
-                {state === 'success' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                        <div style={{
-                            padding: 16, borderRadius: 12,
-                            background: 'rgba(74, 222, 128, 0.06)',
-                            border: '1px solid rgba(74, 222, 128, 0.15)',
-                        }}>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                                Login Credentials (one-time view)
-                            </div>
-                            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.8 }}>
-                                <div><span style={{ color: 'var(--text-muted)' }}>Username:</span> <strong style={{ color: 'var(--neon-cyan)' }}>{slName}</strong></div>
-                                <div><span style={{ color: 'var(--text-muted)' }}>Password:</span> <strong style={{ color: '#4ade80' }}>{tempPassword}</strong></div>
-                            </div>
-                        </div>
-                        <button onClick={handleCopy} style={{
-                            padding: '10px 16px', borderRadius: 8,
-                            background: copied ? 'rgba(74, 222, 128, 0.1)' : 'rgba(0, 240, 255, 0.08)',
-                            border: `1px solid ${copied ? 'rgba(74, 222, 128, 0.3)' : 'rgba(0, 240, 255, 0.2)'}`,
-                            color: copied ? '#4ade80' : 'var(--neon-cyan)',
-                            fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                            transition: 'all 0.2s ease',
-                        }}>
-                            {copied ? <Check size={15} /> : <Copy size={15} />}
-                            {copied ? 'Copied!' : 'Copy Credentials'}
-                        </button>
-                        <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
-                            Share these credentials with the staff member. They will be prompted to change their password on first login.
-                        </p>
-                    </div>
-                )}
-
-                {/* Form State */}
-                {(state === 'form' || state === 'creating' || state === 'error') && (
-                    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        {[
-                            { label: 'Display Name', value: displayName, set: setDisplayName, placeholder: 'e.g. DJ Nova', required: true },
-                            { label: 'SL Name (Username)', value: slName, set: setSlName, placeholder: 'e.g. Nova Resident', required: true },
-                            { label: 'SL UUID', value: slUuid, set: setSlUuid, placeholder: 'Optional — Second Life UUID', required: false },
-                        ].map(f => (
-                            <div key={f.label}>
-                                <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{f.label}</label>
-                                <input
-                                    value={f.value} onChange={e => f.set(e.target.value)}
-                                    placeholder={f.placeholder} required={f.required}
-                                    style={{
-                                        width: '100%', marginTop: 4, padding: '9px 12px',
-                                        background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
-                                        borderRadius: 8, color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-                                    }}
-                                />
-                            </div>
-                        ))}
-
-                        <div>
-                            <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Role</label>
-                            <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                                {([
-                                    { value: 'dj', label: 'DJ', color: '#c084fc' },
-                                    { value: 'host', label: 'Host', color: '#ff6b9d' },
-                                    { value: 'manager', label: 'Manager', color: '#4ade80' },
-                                    { value: 'general_manager', label: 'GM', color: '#00f0ff' },
-                                ] as const).map(r => (
-                                    <button key={r.value} type="button"
-                                        onClick={() => setRole(r.value)}
-                                        style={{
-                                            padding: '6px 14px', borderRadius: 8,
-                                            border: `1px solid ${role === r.value ? r.color + '60' : 'var(--glass-border)'}`,
-                                            background: role === r.value ? r.color + '15' : 'transparent',
-                                            color: role === r.value ? r.color : 'var(--text-secondary)',
-                                            fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                                            transition: 'all 0.15s ease',
-                                        }}
-                                    >
-                                        {r.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {errMsg && (
-                            <div style={{
-                                padding: '10px 14px', borderRadius: 8,
-                                background: 'rgba(255, 0, 60, 0.08)',
-                                border: '1px solid rgba(255, 0, 60, 0.2)',
-                                color: '#ff6b6b', fontSize: 12,
-                            }}>
-                                {errMsg}
-                            </div>
-                        )}
-
-                        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                            <button type="button" onClick={handleClose} style={{
-                                flex: 1, padding: 10, borderRadius: 8,
-                                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
-                                color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13,
-                            }}>Cancel</button>
-                            <button type="submit" disabled={state === 'creating'} style={{
-                                flex: 1, padding: 10, borderRadius: 8,
-                                background: 'rgba(0, 240, 255, 0.1)', border: '1px solid rgba(0, 240, 255, 0.3)',
-                                color: 'var(--neon-cyan)', cursor: state === 'creating' ? 'wait' : 'pointer',
-                                fontSize: 13, fontWeight: 500,
-                                opacity: state === 'creating' ? 0.6 : 1,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                            }}>
-                                {state === 'creating' && <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />}
-                                {state === 'creating' ? 'Creating...' : 'Create Staff'}
-                            </button>
-                        </div>
-
-                        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                    </form>
-                )}
-            </div>
-        </div>
-    );
-}
+import AddStaffModal from '@/components/ui/AddStaffModal';
 
 /* ── Staff Page ── */
 export default function StaffPage() {
@@ -352,8 +144,21 @@ export default function StaffPage() {
                                             {roleIcons[member.role]}
                                             {config.label}
                                         </div>
+                                        {/* Function: Display secondary roles if any */}
+                                        {member.secondaryRoles && member.secondaryRoles.length > 0 && (
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                                                {member.secondaryRoles.map(sr => (
+                                                    <span key={sr} style={{
+                                                        fontSize: 9, padding: '2px 6px', borderRadius: 4,
+                                                        background: 'rgba(255,255,255,0.05)', color: 'var(--text-secondary)'
+                                                    }}>
+                                                        + {ROLE_CONFIG[sr]?.shortLabel}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
                                         {member.slName && (
-                                            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                                            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
                                                 {member.slName}
                                             </div>
                                         )}

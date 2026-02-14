@@ -278,7 +278,7 @@ export default function DashboardPage() {
                     </div>
                     {/* Host Actions + Tip */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                        {!isGuest && (
+                        {can('host') && (
                             <>
                                 <button className={`${styles.hostBtn} ${styles.hostBtnPrimary}`}>Send Message</button>
                                 <button className={`${styles.hostBtn} ${styles.hostBtnSecondary}`}>View Profile</button>
@@ -400,7 +400,7 @@ export default function DashboardPage() {
 
                 {/* Right Column — Real-Time Stats (staff only) */}
                 <div className={styles.rightCol}>
-                    {!isGuest && (
+                    {can('host') && (
                         <GlassCard neon="cyan">
                             <div className={styles.sectionHeader}>
                                 <h2 className={styles.sectionTitle}>
@@ -501,7 +501,7 @@ export default function DashboardPage() {
                     )}
 
                     {/* Guest Activity — staff only */}
-                    {!isGuest && (
+                    {can('host') && (
                         <GlassCard>
                             <div className={styles.sectionHeader}>
                                 <h2 className={styles.sectionTitle}>Guest Activity</h2>
@@ -523,7 +523,7 @@ export default function DashboardPage() {
                     )}
 
                     {/* Tip Feed — managers only */}
-                    {!isGuest && can('manager') && (
+                    {can('manager') && (
                         <GlassCard neon="green">
                             <div className={styles.sectionHeader}>
                                 <h2 className={styles.sectionTitle}>Tip Feed</h2>
@@ -544,7 +544,7 @@ export default function DashboardPage() {
             </div>
 
             {/* ═══ STAFF FEED — Staff only ═══ */}
-            {!isGuest && (
+            {can('host') && (
                 <GlassCard>
                     <div className={styles.sectionHeader}>
                         <h2 className={styles.sectionTitle}>Staff Feed</h2>
