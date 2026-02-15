@@ -1,6 +1,92 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Check role in Custom Claims (fast) OR Firestore doc (fallback)
+    function hasRole(role) {
+      return (request.auth.token.role == role) || 
+             (getUserData().role == role);
+    }
+    
+    function isStaff() {
+      return hasRole('manager') || hasRole('general_manager') || hasRole('owner') || hasRole('host') || hasRole('dj');
+    }
+    
+    function isManager() {
+      return hasRole('manager') || hasRole('general_manager') || hasRole('owner');
+    }
+
+    // --- Collections ---
+
+    // Users: Public read, Write only by Admin SDK (backend) or self (limited updates)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if false; // Created via API
+      allow delete: if false;
+      allow update: if request.auth.uid == userId && 
+         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['onlineStatus', 'mustChangePassword']));
+    }
+
+    // Events: Public read, Manager write
+    match /events/{eventId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isManager();
+      allow update: if isSignedIn() && isManager();
+      allow delete: if isSignedIn() && isManager();
+    }
+
+    // Shifts: Staff read, Manager write, Staff can update response
+    match /shifts/{shiftId} {
+      allow read: if isSignedIn();
+      
+      allow create: if isSignedIn() && isManager();
+      allow delete: if isSignedIn() && isManager();
+      
+      allow update: if isSignedIn() && (
+        isManager() || 
+        // Staff can only update response/notes on their own shifts
+        (resource.data.staffId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['response', 'notes']))
+      );
+    }
+
+    // Availability: Staff read all, write own
+    match /availability/{availId} {
+      allow read: if isSignedIn() && isStaff();
+      
+      allow create: if isSignedIn() && (
+        isManager() || 
+        (request.resource.data.staffId == request.auth.uid)
+      );
+      
+      allow update: if isSignedIn() && (
+        isManager() || 
+        (resource.data.staffId == request.auth.uid)
+      );
+      
+      allow delete: if isSignedIn() && (
+        isManager() || 
+        (resource.data.staffId == request.auth.uid)
+      );
+    }
+
+    // Tips: Read own/manager, Create allow
+    match /tips/{tipId} {
+      allow read: if isSignedIn() && (request.auth.uid == resource.data.toUserId || request.auth.uid == resource.data.fromUserId || isManager());
+      // Explicitly allow create for any signed in user
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Tips are immutable records
+    }
+    
+    // Default Deny
     match /{document=**} {
       allow read, write: if false;
     }
