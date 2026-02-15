@@ -47,21 +47,31 @@ function getAdminApp(): App {
             throw new Error('Invalid JSON in FIREBASE_ADMIN_PRIVATE_KEY');
         }
     } else {
-        // Case B: PEM String
-        // First, unescape any literal "\n" characters
+        // Case B: PEM String or "One-Liner"
         let privateKey = key.replace(/\\n/g, '\n');
 
-        // HANDLING "ONE-LINER" KEYS (Common Copy-Paste Issue)
-        // If the environment/secret manager stripped all newlines, we must reconstruct the PEM structure.
-        if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-            const header = '-----BEGIN PRIVATE KEY-----';
-            const footer = '-----END PRIVATE KEY-----';
+        // Regex to aggressively find the body between headers, ignoring all whitespace/newlines
+        // This handles:
+        // - Standard PEM
+        // - One-liners
+        // - Broken headers (spaces inside)
+        // - Keys with spaces in base64
+        const match = privateKey.match(/-----BEGIN PRIVATE KEY-----([^-]+)-----END PRIVATE KEY-----/);
 
-            // Extract body, remove spaces, and reconstruct
-            let body = privateKey.replace(header, '').replace(footer, '').trim();
-            body = body.replace(/ /g, ''); // Remove spaces inside base64 body
+        if (match) {
+            // Found the body! Clean it up.
+            let body = match[1].replace(/\s/g, ''); // Remove ALL whitespace (spaces, tabs, newlines)
 
-            privateKey = `${header}\n${body}\n${footer}`;
+            // Reconstruct perfectly
+            privateKey = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+
+            // --- DIAGNOSTIC: Check if body seems valid ---
+            // Base64 length should be roughly divisible by 4 (with padding)
+            console.log(`[DIAGNOSTIC] Reconstructed Body Length: ${body.length}`);
+            console.log(`[DIAGNOSTIC] Body Start: ${body.substring(0, 10)}`);
+            console.log(`[DIAGNOSTIC] Body End: ${body.substring(body.length - 10)}`);
+        } else {
+            console.warn('[DIAGNOSTIC] Could not regex match the private key headers. Using raw value.');
         }
 
         credential = cert({
