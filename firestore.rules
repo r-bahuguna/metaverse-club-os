@@ -18,11 +18,11 @@ service cloud.firestore {
     }
     
     function isStaff() {
-      return hasRole('manager') || hasRole('general_manager') || hasRole('owner') || hasRole('host') || hasRole('dj');
+      return hasRole('super_admin') || hasRole('owner') || hasRole('general_manager') || hasRole('manager') || hasRole('host') || hasRole('dj');
     }
     
     function isManager() {
-      return hasRole('manager') || hasRole('general_manager') || hasRole('owner');
+      return hasRole('super_admin') || hasRole('owner') || hasRole('general_manager') || hasRole('manager');
     }
 
     // --- Collections ---
