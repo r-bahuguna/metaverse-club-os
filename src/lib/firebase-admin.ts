@@ -25,22 +25,6 @@ function getAdminApp(): App {
         throw new Error('Missing FIREBASE_ADMIN_* environment variables');
     }
 
-    // --- SAFE DIAGNOSTIC LOGGING ---
-    // We log the STRUCTURE of the key, but never the key content itself.
-    const keyLen = privateKeyRaw.length;
-    const startObj = privateKeyRaw.substring(0, 10);
-    const endObj = privateKeyRaw.substring(keyLen - 10);
-    const newlineCount = (privateKeyRaw.match(/\n/g) || []).length;
-    const escapedNewlineCount = (privateKeyRaw.match(/\\n/g) || []).length;
-
-    console.log(`[DIAGNOSTIC] Key Length: ${keyLen}`);
-    // Replace characters with * to be safe, but keep the structural hints
-    console.log(`[DIAGNOSTIC] Starts with: '${startObj}'`);
-    console.log(`[DIAGNOSTIC] Ends with: '${endObj}'`);
-    console.log(`[DIAGNOSTIC] Newlines (\\n literal): ${escapedNewlineCount}`);
-    console.log(`[DIAGNOSTIC] Newlines (actual): ${newlineCount}`);
-    // -------------------------------
-
     let credential;
 
     // Robust handling: User might paste the full JSON file OR just the PEM key
@@ -60,13 +44,26 @@ function getAdminApp(): App {
             credential = cert(serviceAccount);
         } catch (error) {
             console.error('Failed to parse FIREBASE_ADMIN_PRIVATE_KEY as JSON', error);
-            // Fallback: maybe it was just a string starting with {? Unlikely but safe to fail hard here if it looked like JSON.
             throw new Error('Invalid JSON in FIREBASE_ADMIN_PRIVATE_KEY');
         }
     } else {
-        // Case B: Standard PEM string
-        // We MUST unescape newlines here (e.g. \n -> actual newline) for PEM format
-        const privateKey = key.replace(/\\n/g, '\n');
+        // Case B: PEM String
+        // First, unescape any literal "\n" characters
+        let privateKey = key.replace(/\\n/g, '\n');
+
+        // HANDLING "ONE-LINER" KEYS (Common Copy-Paste Issue)
+        // If the environment/secret manager stripped all newlines, we must reconstruct the PEM structure.
+        if (!privateKey.includes('\n') && privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+            const header = '-----BEGIN PRIVATE KEY-----';
+            const footer = '-----END PRIVATE KEY-----';
+
+            // Extract body, remove spaces, and reconstruct
+            let body = privateKey.replace(header, '').replace(footer, '').trim();
+            body = body.replace(/ /g, ''); // Remove spaces inside base64 body
+
+            privateKey = `${header}\n${body}\n${footer}`;
+        }
+
         credential = cert({
             projectId,
             clientEmail,
