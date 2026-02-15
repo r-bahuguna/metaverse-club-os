@@ -28,17 +28,29 @@ function getAdminApp(): App {
     let credential;
 
     // Robust handling: User might paste the full JSON file OR just the PEM key
-    if (privateKeyRaw.trim().startsWith('{')) {
+    // AND it might be wrapped in quotes by the environment/secret manager.
+
+    let key = privateKeyRaw.trim();
+
+    // 1. Strip surrounding quotes if present
+    if (key.startsWith('"') && key.endsWith('"')) {
+        key = key.slice(1, -1);
+    }
+
+    if (key.startsWith('{')) {
+        // Case A: Full Service Account JSON
         try {
-            const serviceAccount = JSON.parse(privateKeyRaw);
+            const serviceAccount = JSON.parse(key);
             credential = cert(serviceAccount);
         } catch (error) {
             console.error('Failed to parse FIREBASE_ADMIN_PRIVATE_KEY as JSON', error);
+            // Fallback: maybe it was just a string starting with {? Unlikely but safe to fail hard here if it looked like JSON.
             throw new Error('Invalid JSON in FIREBASE_ADMIN_PRIVATE_KEY');
         }
     } else {
-        // Standard PEM string (handle newlines + surrounding quotes)
-        const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/^"+|"+$/g, '');
+        // Case B: Standard PEM string
+        // We MUST unescape newlines here (e.g. \n -> actual newline) for PEM format
+        const privateKey = key.replace(/\\n/g, '\n');
         credential = cert({
             projectId,
             clientEmail,
