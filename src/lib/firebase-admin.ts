@@ -50,28 +50,27 @@ function getAdminApp(): App {
         // Case B: PEM String or "One-Liner"
         let privateKey = key.replace(/\\n/g, '\n');
 
-        // Regex to aggressively find the body between headers, ignoring all whitespace/newlines
-        // This handles:
-        // - Standard PEM
-        // - One-liners
-        // - Broken headers (spaces inside)
-        // - Keys with spaces in base64
-        const match = privateKey.match(/-----BEGIN PRIVATE KEY-----([^-]+)-----END PRIVATE KEY-----/);
+        // Robust parsing using indexOf (avoid regex pitfalls with hyphens/newlines)
+        const header = '-----BEGIN PRIVATE KEY-----';
+        const footer = '-----END PRIVATE KEY-----';
 
-        if (match) {
-            // Found the body! Clean it up.
-            let body = match[1].replace(/\s/g, ''); // Remove ALL whitespace (spaces, tabs, newlines)
+        if (privateKey.includes(header) && privateKey.includes(footer)) {
+            // Extract the body between header and footer
+            const start = privateKey.indexOf(header) + header.length;
+            const end = privateKey.lastIndexOf(footer);
+            let body = privateKey.substring(start, end);
 
-            // Reconstruct perfectly
-            privateKey = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
+            // Remove ALL whitespace (spaces, tabs, newlines)
+            body = body.replace(/\s/g, '');
 
-            // --- DIAGNOSTIC: Check if body seems valid ---
-            // Base64 length should be roughly divisible by 4 (with padding)
-            console.log(`[DIAGNOSTIC] Reconstructed Body Length: ${body.length}`);
-            console.log(`[DIAGNOSTIC] Body Start: ${body.substring(0, 10)}`);
-            console.log(`[DIAGNOSTIC] Body End: ${body.substring(body.length - 10)}`);
-        } else {
-            console.warn('[DIAGNOSTIC] Could not regex match the private key headers. Using raw value.');
+            // FIX URL-SAFE BASE64 characters
+            // Google sometimes provides keys with '-' and '_' instead of '+' and '/'
+            if (body.includes('-') || body.includes('_')) {
+                body = body.replace(/-/g, '+').replace(/_/g, '/');
+            }
+
+            // Reconstruct perfectly standard PEM
+            privateKey = `${header}\n${body}\n${footer}`;
         }
 
         credential = cert({
