@@ -19,21 +19,37 @@ function getAdminApp(): App {
 
     const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY
-        ? process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, '\n').replace(/^"+|"+$/g, '')
-        : undefined;
+    const privateKeyRaw = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
 
-    if (!projectId || !clientEmail || !privateKey) {
+    if (!projectId || !clientEmail || !privateKeyRaw) {
         throw new Error('Missing FIREBASE_ADMIN_* environment variables');
+    }
+
+    let credential;
+
+    // Robust handling: User might paste the full JSON file OR just the PEM key
+    if (privateKeyRaw.trim().startsWith('{')) {
+        try {
+            const serviceAccount = JSON.parse(privateKeyRaw);
+            credential = cert(serviceAccount);
+        } catch (error) {
+            console.error('Failed to parse FIREBASE_ADMIN_PRIVATE_KEY as JSON', error);
+            throw new Error('Invalid JSON in FIREBASE_ADMIN_PRIVATE_KEY');
+        }
+    } else {
+        // Standard PEM string (handle newlines + surrounding quotes)
+        const privateKey = privateKeyRaw.replace(/\\n/g, '\n').replace(/^"+|"+$/g, '');
+        credential = cert({
+            projectId,
+            clientEmail,
+            privateKey,
+        });
     }
 
     try {
         adminApp = initializeApp({
-            credential: cert({
-                projectId,
-                clientEmail,
-                privateKey,
-            }),
+            credential,
+            projectId, // Explicitly pass projectId to ensure app context
         });
         return adminApp;
     } catch (error) {
