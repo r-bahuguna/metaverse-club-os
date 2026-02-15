@@ -47,31 +47,27 @@ function getAdminApp(): App {
             throw new Error('Invalid JSON in FIREBASE_ADMIN_PRIVATE_KEY');
         }
     } else {
-        // Case B: PEM String or "One-Liner"
-        let privateKey = key.replace(/\\n/g, '\n');
+        // Case B: PEM String / One-Liner / URL-Safe / Messy Headers
+        // The "Nuclear Option": We don't trust the headers. We extract the body aggressively.
 
-        // Robust parsing using indexOf (avoid regex pitfalls with hyphens/newlines)
-        const header = '-----BEGIN PRIVATE KEY-----';
-        const footer = '-----END PRIVATE KEY-----';
+        let keyText = key.replace(/\\n/g, ''); // Flatten everything first
 
-        if (privateKey.includes(header) && privateKey.includes(footer)) {
-            // Extract the body between header and footer
-            const start = privateKey.indexOf(header) + header.length;
-            const end = privateKey.lastIndexOf(footer);
-            let body = privateKey.substring(start, end);
+        // 1. Remove header/footer (loose match)
+        // Matches "-----BEGIN" ... "KEY-----" and everything in between those markers
+        keyText = keyText.replace(/-----BEGIN[\s\S]*?KEY-----/g, '');
+        keyText = keyText.replace(/-----END[\s\S]*?KEY-----/g, '');
 
-            // Remove ALL whitespace (spaces, tabs, newlines)
-            body = body.replace(/\s/g, '');
+        // 2. Remove ALL whitespace (spaces, tabs, newlines)
+        // This leaves just the base64 body (standard or URL-safe)
+        let body = keyText.replace(/\s/g, '');
 
-            // FIX URL-SAFE BASE64 characters
-            // Google sometimes provides keys with '-' and '_' instead of '+' and '/'
-            if (body.includes('-') || body.includes('_')) {
-                body = body.replace(/-/g, '+').replace(/_/g, '/');
-            }
-
-            // Reconstruct perfectly standard PEM
-            privateKey = `${header}\n${body}\n${footer}`;
+        // 3. Fix URL-Safe Base64 (Google sometimes gives this)
+        if (body.includes('-') || body.includes('_')) {
+            body = body.replace(/-/g, '+').replace(/_/g, '/');
         }
+
+        // 4. Reconstruct standard PEM
+        const privateKey = `-----BEGIN PRIVATE KEY-----\n${body}\n-----END PRIVATE KEY-----`;
 
         credential = cert({
             projectId,
