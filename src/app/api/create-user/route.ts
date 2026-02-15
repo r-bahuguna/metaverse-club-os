@@ -66,6 +66,9 @@ export async function POST(req: NextRequest) {
             displayName: displayName,
         });
 
+        // Set custom claims for Role-Based Access Control (RBAC) in Security Rules
+        await adminAuth.setCustomUserClaims(authUser.uid, { role });
+
         /* ── Create Firestore user document ── */
         const now = new Date().toISOString();
         const userData = {

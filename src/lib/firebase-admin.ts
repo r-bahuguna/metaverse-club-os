@@ -19,7 +19,9 @@ function getAdminApp(): App {
 
     const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-    const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY
+        ? process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, '\n').replace(/^"+|"+$/g, '')
+        : undefined;
 
     if (!projectId || !clientEmail || !privateKey) {
         throw new Error('Missing FIREBASE_ADMIN_* environment variables');
