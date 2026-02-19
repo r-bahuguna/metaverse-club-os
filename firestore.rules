@@ -85,7 +85,28 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow update, delete: if false; // Tips are immutable records
     }
-    
+
+    // Event Schedules: Manager CRUD, staff can update their response/message
+    match /eventSchedules/{schedId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isManager();
+      allow delete: if isSignedIn() && isManager();
+      allow update: if isSignedIn() && (
+        isManager() ||
+        // DJ can update their own response/message
+        (resource.data.djId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['djResponse', 'djMessage'])) ||
+        // Host can update their own response/message
+        (resource.data.hostId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostResponse', 'hostMessage']))
+      );
+    }
+
+    // Password reset requests: Staff create own, Manager read
+    match /password_reset_requests/{reqId} {
+      allow read: if isSignedIn() && isManager();
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && isManager();
+    }
+
     // Default Deny
     match /{document=**} {
       allow read, write: if false;

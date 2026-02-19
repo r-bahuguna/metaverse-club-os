@@ -120,7 +120,7 @@ export const NAV_ITEMS: NavItem[] = [
         href: '/dashboard/settings',
         icon: 'Settings',
         neonColor: 'rgba(255,255,255,0.7)', // white
-        requiredRoles: ['super_admin', 'owner', 'general_manager'],
+        requiredRoles: ['super_admin', 'owner', 'general_manager', 'manager', 'dj', 'host', 'vip_member', 'member'],
     },
 ];
 

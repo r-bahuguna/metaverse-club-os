@@ -22,6 +22,7 @@ export interface AppUser {
   secondaryRoles?: UserRole[];
   slName?: string;
   slUuid?: string;
+  discordUsername?: string;
   createdAt?: string;
   createdBy?: string;
   onlineStatus?: OnlineStatus;
@@ -66,7 +67,7 @@ export interface StaffMember extends User {
   bio?: string;
 }
 
-/** Schedule shift */
+/** Schedule shift (legacy) */
 export interface Shift {
   id: string;
   staffId: string;
@@ -78,6 +79,29 @@ export interface Shift {
   status: ShiftStatus;
   response: ShiftResponse;
   notes?: string;
+}
+
+/** Event-centric schedule (new model: DJ + Host per event) */
+export interface EventSchedule {
+  id: string;
+  eventId: string;           // Links to events collection
+  eventName: string;
+  date: string;              // YYYY-MM-DD
+  startTime: string;         // "22:00"
+  endTime: string;           // "02:00"
+  djId: string;
+  djName: string;
+  djResponse: ShiftResponse;
+  djMessage?: string;
+  hostId: string;
+  hostName: string;
+  hostResponse: ShiftResponse;
+  hostMessage?: string;
+  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed';
+  imageUrl?: string;         // Event poster/flyer
+  genre?: string;
+  createdBy: string;
+  createdAt: string;
 }
 
 /** Staff availability window for smart scheduling */

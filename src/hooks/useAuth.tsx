@@ -9,7 +9,7 @@ import {
     onAuthStateChanged,
     sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { AppUser, UserRole } from '@/lib/types';
 
@@ -61,8 +61,10 @@ async function fetchAppUser(uid: string): Promise<AppUser | null> {
             email: data.email ?? '',
             displayName: data.displayName ?? 'Unknown',
             role: (data.role as UserRole) ?? 'member',
+            secondaryRoles: data.secondaryRoles,
             slName: data.slName,
             slUuid: data.slUuid,
+            discordUsername: data.discordUsername,
             createdAt: data.createdAt,
             createdBy: data.createdBy,
             onlineStatus: data.onlineStatus,
@@ -72,6 +74,11 @@ async function fetchAppUser(uid: string): Promise<AppUser | null> {
         console.warn('[useAuth] Failed to fetch user document for', uid);
         return null;
     }
+}
+
+/* ── Web session presence helpers ── */
+async function setPresence(uid: string, status: 'online' | 'away' | 'offline') {
+    try { await updateDoc(doc(db, 'users', uid), { onlineStatus: status }); } catch { /* silent */ }
 }
 
 /* ── Provider ── */
@@ -89,6 +96,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // Authenticated user — resolve Firestore profile
                 const profile = await fetchAppUser(fbUser.uid);
                 setAppUser(profile);
+                // Set presence to online
+                setPresence(fbUser.uid, 'online');
             } else {
                 // Anonymous or no user
                 setAppUser(null);
@@ -98,6 +107,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         return () => unsubscribe();
     }, []);
+
+    /* Web session presence: track tab visibility + page close */
+    useEffect(() => {
+        if (!firebaseUser || firebaseUser.isAnonymous) return;
+        const uid = firebaseUser.uid;
+
+        const handleVisibility = () => {
+            setPresence(uid, document.hidden ? 'away' : 'online');
+        };
+        const handleUnload = () => {
+            // Use sendBeacon for reliability on page close
+            const url = `https://firestore.googleapis.com/v1/projects/risky-desires/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=onlineStatus`;
+            // Fallback: just try updateDoc (may or may not complete)
+            setPresence(uid, 'offline');
+        };
+
+        document.addEventListener('visibilitychange', handleVisibility);
+        window.addEventListener('beforeunload', handleUnload);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibility);
+            window.removeEventListener('beforeunload', handleUnload);
+        };
+    }, [firebaseUser]);
 
     const isAnonymous = firebaseUser?.isAnonymous ?? false;
     const isSuperAdmin = appUser?.role === 'super_admin';
@@ -133,13 +166,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const signOut = useCallback(async () => {
         setError(null);
         try {
+            if (firebaseUser && !firebaseUser.isAnonymous) {
+                await setPresence(firebaseUser.uid, 'offline');
+            }
             await firebaseSignOut(auth);
             setAppUser(null);
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Sign-out failed';
             setError(msg);
         }
-    }, []);
+    }, [firebaseUser]);
 
     /* Password reset */
     const resetPassword = useCallback(async (email: string) => {
