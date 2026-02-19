@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Zap, User, Lock, Eye, EyeOff, Sparkles, LogIn } from 'lucide-react';
-import { collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/firebase';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -22,29 +20,14 @@ export default function LoginPage() {
         }
     }, [firebaseUser, loading, router]);
 
-    /* Resolve username → email if input doesn't contain @ */
-    async function resolveEmail(input: string): Promise<string | null> {
+    /* Resolve username → email.
+       Staff emails are deterministic: slName → lowercase, spaces→dots, @riskydesires.internal
+       This matches the format used in /api/create-user (line 60).
+       We construct it directly instead of querying Firestore (which would fail
+       because the user isn't authenticated yet and security rules require isSignedIn). */
+    function resolveEmail(input: string): string {
         if (input.includes('@')) return input; // already an email
-
-        try {
-            // Look up Firestore user by slName (case-insensitive match)
-            const q = query(collection(db, 'users'), where('slName', '==', input));
-            const snap = await getDocs(q);
-            if (!snap.empty) {
-                return snap.docs[0].data().email || null;
-            }
-
-            // Also try by displayName as fallback
-            const q2 = query(collection(db, 'users'), where('displayName', '==', input));
-            const snap2 = await getDocs(q2);
-            if (!snap2.empty) {
-                return snap2.docs[0].data().email || null;
-            }
-
-            return null;
-        } catch {
-            return null;
-        }
+        return `${input.toLowerCase().replace(/\s+/g, '.')}@riskydesires.internal`;
     }
 
     async function handleEmailSubmit(e: React.FormEvent) {
@@ -53,12 +36,7 @@ export default function LoginPage() {
         setLookupError(null);
         clearError();
 
-        const email = await resolveEmail(username.trim());
-        if (!email) {
-            setLookupError('Username not found. Try your full email address instead.');
-            setSubmitting(false);
-            return;
-        }
+        const email = resolveEmail(username.trim());
 
         await signInWithEmail(email, password);
         setSubmitting(false);
