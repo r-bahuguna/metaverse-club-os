@@ -1,19 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import WheelPicker from './WheelPicker';
-import { ChevronRight, Calendar, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 interface DateRangePickerProps {
     startDate: Date;
     endDate: Date;
     onChange: (start: Date, end: Date) => void;
-    isRange?: boolean; // If false, only picks a single date/time (start)
+    isRange?: boolean;
     minuteInterval?: number;
 }
 
-// Helper to generate date options (e.g. next 30 days)
-function getDateOptions(days = 30) {
+// Generate date options (next 60 days)
+function getDateOptions(days = 60) {
     const options = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -26,7 +26,6 @@ function getDateOptions(days = 30) {
         if (i === 0) label = 'Today';
         if (i === 1) label = 'Tomorrow';
 
-        // Value is ISO date string (YYYY-MM-DD)
         const value = d.toISOString().split('T')[0];
         options.push({ label, value });
     }
@@ -41,39 +40,73 @@ export default function DateRangePicker({
     endDate,
     onChange,
     isRange = false,
-    minuteInterval = 15
 }: DateRangePickerProps) {
     const dateOptions = useMemo(() => getDateOptions(60), []);
 
-    // Internal state handling for wheels
-    const [startDay, setStartDay] = useState(startDate.toISOString().split('T')[0]);
-    const [startHour, setStartHour] = useState(startDate.getHours().toString().padStart(2, '0'));
-    const [startMinute, setStartMinute] = useState(startDate.getMinutes().toString().padStart(2, '0'));
+    /* ── Internal state initialized from props ONCE (lazy initializer) ──
+       No useEffect syncing — this eliminates the circular update bug.
+       The wheels are "uncontrolled" internally, only calling onChange when the user scrolls. */
+    const [startDay, setStartDay] = useState(() => startDate.toISOString().split('T')[0]);
+    const [startHour, setStartHour] = useState(() => startDate.getHours().toString().padStart(2, '0'));
+    const [startMinute, setStartMinute] = useState(() => {
+        const m = startDate.getMinutes();
+        // Snap to nearest 15-minute interval
+        return (Math.round(m / 15) * 15 % 60).toString().padStart(2, '0');
+    });
 
-    const [endDay, setEndDay] = useState(endDate.toISOString().split('T')[0]);
-    const [endHour, setEndHour] = useState(endDate.getHours().toString().padStart(2, '0'));
-    const [endMinute, setEndMinute] = useState(endDate.getMinutes().toString().padStart(2, '0'));
+    const [endDay, setEndDay] = useState(() => endDate.toISOString().split('T')[0]);
+    const [endHour, setEndHour] = useState(() => endDate.getHours().toString().padStart(2, '0'));
+    const [endMinute, setEndMinute] = useState(() => {
+        const m = endDate.getMinutes();
+        return (Math.round(m / 15) * 15 % 60).toString().padStart(2, '0');
+    });
 
-    // Sync from props if they change externally (optional, but good practice)
-    useEffect(() => {
-        setStartDay(startDate.toISOString().split('T')[0]);
-        setStartHour(startDate.getHours().toString().padStart(2, '0'));
-        setStartMinute(startDate.getMinutes().toString().padStart(2, '0'));
-
-        setEndDay(endDate.toISOString().split('T')[0]);
-        setEndHour(endDate.getHours().toString().padStart(2, '0'));
-        setEndMinute(endDate.getMinutes().toString().padStart(2, '0'));
-    }, [startDate, endDate]);
-
-    // Emit changes
-    const update = (
+    // Emit changes to parent — builds Date objects from internal state
+    const emitChange = useCallback((
         sDay: string, sH: string, sM: string,
         eDay: string, eH: string, eM: string
     ) => {
         const newStart = new Date(`${sDay}T${sH}:${sM}:00`);
         const newEnd = new Date(`${eDay}T${eH}:${eM}:00`);
-        onChange(newStart, newEnd);
-    };
+        // Only emit if dates are valid
+        if (!isNaN(newStart.getTime()) && !isNaN(newEnd.getTime())) {
+            onChange(newStart, newEnd);
+        }
+    }, [onChange]);
+
+    /* ── Each wheel handler updates local state AND emits ── */
+    const handleStartDay = useCallback((val: string) => {
+        setStartDay(val);
+        // If end day is before new start day, auto-advance end day
+        const newEndDay = endDay < val ? val : endDay;
+        if (newEndDay !== endDay) setEndDay(newEndDay);
+        emitChange(val, startHour, startMinute, newEndDay, endHour, endMinute);
+    }, [endDay, startHour, startMinute, endHour, endMinute, emitChange]);
+
+    const handleStartHour = useCallback((val: string) => {
+        setStartHour(val);
+        emitChange(startDay, val, startMinute, endDay, endHour, endMinute);
+    }, [startDay, startMinute, endDay, endHour, endMinute, emitChange]);
+
+    const handleStartMinute = useCallback((val: string) => {
+        setStartMinute(val);
+        emitChange(startDay, startHour, val, endDay, endHour, endMinute);
+    }, [startDay, startHour, endDay, endHour, endMinute, emitChange]);
+
+    const handleEndDay = useCallback((val: string) => {
+        setEndDay(val);
+        emitChange(startDay, startHour, startMinute, val, endHour, endMinute);
+    }, [startDay, startHour, startMinute, endHour, endMinute, emitChange]);
+
+    const handleEndHour = useCallback((val: string) => {
+        setEndHour(val);
+        emitChange(startDay, startHour, startMinute, endDay, val, endMinute);
+    }, [startDay, startHour, startMinute, endDay, endMinute, emitChange]);
+
+    const handleEndMinute = useCallback((val: string) => {
+        setEndMinute(val);
+        emitChange(startDay, startHour, startMinute, endDay, endHour, val);
+    }, [startDay, startHour, startMinute, endDay, endHour, emitChange]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -84,100 +117,76 @@ export default function DateRangePicker({
                 borderRadius: 12, padding: 12
             }}>
                 <div style={{
-                    fontSize: 12, color: 'var(--neon-cyan)',
-                    marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6
+                    fontSize: 11, color: 'var(--neon-cyan)', fontWeight: 600,
+                    marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+                    textTransform: 'uppercase', letterSpacing: '0.05em',
                 }}>
-                    <Clock size={12} /> START TIME
+                    <Clock size={12} /> START
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
                     <div style={{ flex: 2 }}>
-                        <WheelPicker
-                            items={dateOptions}
-                            value={startDay}
-                            onChange={(val) => {
-                                setStartDay(val);
-                                // Auto-update end day if it was same
-                                let newEndDay = endDay;
-                                if (endDay < val) newEndDay = val;
-                                update(val, startHour, startMinute, newEndDay, endHour, endMinute);
-                            }}
-                        />
+                        <WheelPicker items={dateOptions} value={startDay} onChange={handleStartDay} />
                     </div>
+                    <div style={{ width: 1, background: 'rgba(255,255,255,0.06)' }} />
                     <div style={{ flex: 1 }}>
-                        <WheelPicker
-                            items={HOURS}
-                            value={startHour}
-                            onChange={(val) => {
-                                setStartHour(val);
-                                update(startDay, val, startMinute, endDay, endHour, endMinute);
-                            }}
-                        />
+                        <WheelPicker items={HOURS} value={startHour} onChange={handleStartHour} />
                     </div>
+                    <div style={{
+                        display: 'flex', alignItems: 'center', color: 'var(--text-muted)',
+                        fontSize: 16, fontWeight: 700, padding: '0 2px',
+                    }}>:</div>
                     <div style={{ flex: 1 }}>
-                        <WheelPicker
-                            items={MINUTES}
-                            value={startMinute}
-                            onChange={(val) => {
-                                setStartMinute(val);
-                                update(startDay, startHour, val, endDay, endHour, endMinute);
-                            }}
-                        />
+                        <WheelPicker items={MINUTES} value={startMinute} onChange={handleStartMinute} />
                     </div>
                 </div>
             </div>
 
             {/* End Time Section (only if range) */}
-            {isRange ? (
+            {isRange && (
                 <div style={{
                     background: 'rgba(255,255,255,0.02)',
                     border: '1px solid rgba(255,255,255,0.06)',
                     borderRadius: 12, padding: 12
                 }}>
                     <div style={{
-                        fontSize: 12, color: 'var(--neon-purple)',
-                        marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6
+                        fontSize: 11, color: 'var(--neon-purple)', fontWeight: 600,
+                        marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+                        textTransform: 'uppercase', letterSpacing: '0.05em',
                     }}>
-                        <Clock size={12} /> END TIME
+                        <Clock size={12} /> END
                     </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
                         <div style={{ flex: 2 }}>
-                            <WheelPicker
-                                items={dateOptions}
-                                value={endDay}
-                                onChange={(val) => {
-                                    setEndDay(val);
-                                    update(startDay, startHour, startMinute, val, endHour, endMinute);
-                                }}
-                            />
+                            <WheelPicker items={dateOptions} value={endDay} onChange={handleEndDay} />
                         </div>
+                        <div style={{ width: 1, background: 'rgba(255,255,255,0.06)' }} />
                         <div style={{ flex: 1 }}>
-                            <WheelPicker
-                                items={HOURS}
-                                value={endHour}
-                                onChange={(val) => {
-                                    setEndHour(val);
-                                    update(startDay, startHour, startMinute, endDay, val, endMinute);
-                                }}
-                            />
+                            <WheelPicker items={HOURS} value={endHour} onChange={handleEndHour} />
                         </div>
+                        <div style={{
+                            display: 'flex', alignItems: 'center', color: 'var(--text-muted)',
+                            fontSize: 16, fontWeight: 700, padding: '0 2px',
+                        }}>:</div>
                         <div style={{ flex: 1 }}>
-                            <WheelPicker
-                                items={MINUTES}
-                                value={endMinute}
-                                onChange={(val) => {
-                                    setEndMinute(val);
-                                    update(startDay, startHour, startMinute, endDay, endHour, val);
-                                }}
-                            />
+                            <WheelPicker items={MINUTES} value={endMinute} onChange={handleEndMinute} />
                         </div>
                     </div>
                 </div>
-            ) : (
+            )}
+
+            {/* Duration indicator */}
+            {isRange && (
                 <div style={{
-                    textAlign: 'center', fontSize: 12, color: 'var(--text-muted)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6
+                    textAlign: 'center', fontSize: 11, color: 'var(--text-muted)',
+                    fontFamily: 'var(--font-mono)',
                 }}>
-                    Duration: {((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60)).toFixed(1)} hours
+                    Duration: {(() => {
+                        const s = new Date(`${startDay}T${startHour}:${startMinute}:00`);
+                        const e = new Date(`${endDay}T${endHour}:${endMinute}:00`);
+                        let diff = (e.getTime() - s.getTime()) / (1000 * 60 * 60);
+                        if (diff < 0) diff += 24; // Wraps midnight
+                        return diff.toFixed(1);
+                    })()} hours
                 </div>
             )}
         </div>

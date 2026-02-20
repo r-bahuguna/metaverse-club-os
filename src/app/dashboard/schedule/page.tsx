@@ -1,14 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Calendar, Clock, Plus, ArrowLeft, ArrowRight, X, Check, XCircle, MessageSquare, ChevronDown, Headphones, Mic } from 'lucide-react';
+import { Calendar, Clock, Plus, ArrowLeft, ArrowRight, Check, XCircle, MessageSquare, Headphones, Mic, AlertTriangle, Send, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { db } from '@/lib/firebase';
-import { collection, query, getDocs, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, addDoc, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import Modal from '@/components/ui/Modal';
-import { EventSchedule, AppUser } from '@/lib/types';
-import { ROLE_CONFIG, ROLE_HIERARCHY } from '@/lib/constants';
+import DateRangePicker from '@/components/ui/DateRangePicker';
+import { ClubEvent, AppUser } from '@/lib/types';
+import { ROLE_CONFIG } from '@/lib/constants';
 
 /* ── Helpers ── */
 function getStartOfWeek(date: Date) {
@@ -24,33 +25,46 @@ function addDays(date: Date, days: number) {
     return r;
 }
 
-function formatDateKey(date: Date) {
+function fmtDateKey(date: Date) {
     return date.toISOString().split('T')[0];
 }
 
-/* Evening hours for a nightclub: 18:00 → 04:00 (next day) */
-const HOURS = [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4];
+/* Full 24-hour range — collapsed by default to 12:00-06:00 (practical range) */
+const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
+const DEFAULT_START_HOUR = 12;
+const DEFAULT_END_HOUR = 6; // wraps to next day
 
-function responseColor(r: string) {
+function getVisibleHours(showFullDay: boolean): number[] {
+    if (showFullDay) return ALL_HOURS;
+    // Default: 12:00 → 05:00 (18 hours covering afternoon prep + night + early morning)
+    const hours = [];
+    for (let h = DEFAULT_START_HOUR; h !== DEFAULT_END_HOUR; h = (h + 1) % 24) {
+        hours.push(h);
+    }
+    hours.push(DEFAULT_END_HOUR);
+    return hours;
+}
+
+function responseColor(r?: string) {
     switch (r) {
         case 'accepted': return '#4ade80';
         case 'declined': return '#ef4444';
-        case 'counter': return '#fbbf24';
+        case 'reschedule_requested': return '#fbbf24';
         default: return 'rgba(255,255,255,0.3)';
     }
 }
 
-function responseBg(r: string) {
+function responseBg(r?: string) {
     switch (r) {
         case 'accepted': return 'rgba(74, 222, 128, 0.1)';
         case 'declined': return 'rgba(239, 68, 68, 0.1)';
-        case 'counter': return 'rgba(251, 191, 36, 0.1)';
+        case 'reschedule_requested': return 'rgba(251, 191, 36, 0.1)';
         default: return 'rgba(255,255,255,0.04)';
     }
 }
 
-/* ── Event Block (in calendar) ── */
-function EventBlock({ event, onClick }: { event: EventSchedule; onClick: () => void }) {
+/* ── Event Block (in calendar cell) ── */
+function EventBlock({ event, onClick }: { event: ClubEvent; onClick: () => void }) {
     const startH = parseInt(event.startTime.split(':')[0]);
     const endH = parseInt(event.endTime.split(':')[0]);
     const span = endH > startH ? endH - startH : (24 - startH + endH);
@@ -60,7 +74,7 @@ function EventBlock({ event, onClick }: { event: EventSchedule; onClick: () => v
             onClick={onClick}
             style={{
                 position: 'absolute', top: 2, left: 2, right: 2,
-                height: `calc(${span * 100}% - 4px)`,
+                height: `calc(${Math.min(span, 6) * 100}% - 4px)`,
                 minHeight: 32,
                 background: 'linear-gradient(135deg, rgba(192, 132, 252, 0.2), rgba(0, 240, 255, 0.15))',
                 border: '1px solid rgba(192, 132, 252, 0.3)',
@@ -82,7 +96,7 @@ function EventBlock({ event, onClick }: { event: EventSchedule; onClick: () => v
             }}
         >
             <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {event.eventName}
+                {event.name}
             </div>
             <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-mono)' }}>
                 {event.startTime}–{event.endTime}
@@ -107,7 +121,7 @@ function EventBlock({ event, onClick }: { event: EventSchedule; onClick: () => v
 function EventDetailModal({
     event, open, onClose, canManage, currentUserId, onRespond, onDelete
 }: {
-    event: EventSchedule | null;
+    event: ClubEvent | null;
     open: boolean;
     onClose: () => void;
     canManage: boolean;
@@ -122,7 +136,7 @@ function EventDetailModal({
 
     const isDj = event.djId === currentUserId;
     const isHost = event.hostId === currentUserId;
-    const myRole = isDj ? 'dj' : isHost ? 'host' : null;
+    const myRole = isDj ? 'dj' as const : isHost ? 'host' as const : null;
     const myResponse = isDj ? event.djResponse : isHost ? event.hostResponse : null;
 
     async function handleRespond(resp: string) {
@@ -134,13 +148,13 @@ function EventDetailModal({
     }
 
     return (
-        <Modal open={open} onClose={onClose} title={event.eventName} maxWidth={520}>
+        <Modal open={open} onClose={onClose} title={event.name} maxWidth={520}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {/* Time & Date */}
-                <div style={{ display: 'flex', gap: 16 }}>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
                         <Calendar size={14} style={{ color: 'var(--neon-cyan)' }} />
-                        {new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                        {new Date(event.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)' }}>
                         <Clock size={14} style={{ color: 'var(--neon-purple)' }} />
@@ -154,6 +168,10 @@ function EventDetailModal({
                     </div>
                 )}
 
+                {event.description && (
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{event.description}</p>
+                )}
+
                 {/* Crew assignments */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {/* DJ */}
@@ -164,11 +182,7 @@ function EventDetailModal({
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{
-                                width: 32, height: 32, borderRadius: 10,
-                                background: 'linear-gradient(135deg, #c084fc, #a855f7)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #c084fc, #a855f7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <Headphones size={16} color="#fff" />
                             </div>
                             <div>
@@ -176,12 +190,8 @@ function EventDetailModal({
                                 <div style={{ fontSize: 14, fontWeight: 600, color: '#c084fc' }}>{event.djName || 'Unassigned'}</div>
                             </div>
                         </div>
-                        <span style={{
-                            fontSize: 10, padding: '3px 8px', borderRadius: 6, fontWeight: 600,
-                            color: responseColor(event.djResponse), textTransform: 'uppercase',
-                            background: `${responseColor(event.djResponse)}15`,
-                        }}>
-                            {event.djResponse}
+                        <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, fontWeight: 600, color: responseColor(event.djResponse), textTransform: 'uppercase', background: `${responseColor(event.djResponse)}15` }}>
+                            {event.djResponse || 'none'}
                         </span>
                     </div>
 
@@ -193,11 +203,7 @@ function EventDetailModal({
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <div style={{
-                                width: 32, height: 32, borderRadius: 10,
-                                background: 'linear-gradient(135deg, #ff6b9d, #ec4899)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
+                            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #ff6b9d, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <Mic size={16} color="#fff" />
                             </div>
                             <div>
@@ -205,102 +211,45 @@ function EventDetailModal({
                                 <div style={{ fontSize: 14, fontWeight: 600, color: '#ff6b9d' }}>{event.hostName || 'Unassigned'}</div>
                             </div>
                         </div>
-                        <span style={{
-                            fontSize: 10, padding: '3px 8px', borderRadius: 6, fontWeight: 600,
-                            color: responseColor(event.hostResponse), textTransform: 'uppercase',
-                            background: `${responseColor(event.hostResponse)}15`,
-                        }}>
-                            {event.hostResponse}
+                        <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, fontWeight: 600, color: responseColor(event.hostResponse), textTransform: 'uppercase', background: `${responseColor(event.hostResponse)}15` }}>
+                            {event.hostResponse || 'none'}
                         </span>
                     </div>
 
-                    {/* Messages */}
                     {event.djMessage && (
                         <div style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(192,132,252,0.06)', fontSize: 12, color: 'var(--text-secondary)' }}>
-                            <span style={{ fontWeight: 600 }}>DJ:</span> {event.djMessage}
+                            <strong>DJ:</strong> {event.djMessage}
                         </div>
                     )}
                     {event.hostMessage && (
                         <div style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,107,157,0.06)', fontSize: 12, color: 'var(--text-secondary)' }}>
-                            <span style={{ fontWeight: 600 }}>Host:</span> {event.hostMessage}
+                            <strong>Host:</strong> {event.hostMessage}
                         </div>
                     )}
                 </div>
 
                 {/* Response area for assigned staff */}
                 {myRole && myResponse === 'pending' && (
-                    <div style={{
-                        padding: 16, borderRadius: 12,
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        display: 'flex', flexDirection: 'column', gap: 10,
-                    }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                            Your Response
-                        </div>
-                        <textarea
-                            value={responseMsg}
-                            onChange={e => setResponseMsg(e.target.value)}
-                            placeholder="Optional message (e.g., RL emergency, counter-proposal...)"
-                            style={{
-                                width: '100%', padding: 10, borderRadius: 8,
-                                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)',
-                                color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-                                minHeight: 60, resize: 'vertical',
-                            }}
-                        />
+                    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Your Response</div>
+                        <textarea value={responseMsg} onChange={e => setResponseMsg(e.target.value)} placeholder="Optional message..." style={{ width: '100%', padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', minHeight: 60, resize: 'vertical' }} />
                         <div style={{ display: 'flex', gap: 8 }}>
-                            <button
-                                onClick={() => handleRespond('accepted')}
-                                disabled={responding}
-                                style={{
-                                    flex: 1, padding: '10px', borderRadius: 10,
-                                    background: 'rgba(74, 222, 128, 0.15)', border: '1px solid rgba(74, 222, 128, 0.3)',
-                                    color: '#4ade80', fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                                }}
-                            >
+                            <button onClick={() => handleRespond('accepted')} disabled={responding} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                                 <Check size={16} /> Accept
                             </button>
-                            <button
-                                onClick={() => handleRespond('declined')}
-                                disabled={responding}
-                                style={{
-                                    flex: 1, padding: '10px', borderRadius: 10,
-                                    background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
-                                    color: '#ef4444', fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                                }}
-                            >
+                            <button onClick={() => handleRespond('declined')} disabled={responding} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                                 <XCircle size={16} /> Decline
                             </button>
-                            <button
-                                onClick={() => handleRespond('counter')}
-                                disabled={responding}
-                                style={{
-                                    flex: 1, padding: '10px', borderRadius: 10,
-                                    background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.2)',
-                                    color: '#fbbf24', fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                                }}
-                            >
-                                <MessageSquare size={16} /> Counter
+                            <button onClick={() => handleRespond('reschedule_requested')} disabled={responding} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', color: '#fbbf24', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                <MessageSquare size={16} /> Modify
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* Manager actions */}
                 {canManage && (
                     <div style={{ display: 'flex', gap: 8, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 16 }}>
-                        <button
-                            onClick={async () => { await onDelete(event.id); onClose(); }}
-                            style={{
-                                padding: '8px 16px', borderRadius: 8,
-                                background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)',
-                                color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                            }}
-                        >
+                        <button onClick={async () => { await onDelete(event.id); onClose(); }} style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                             Cancel Event
                         </button>
                     </div>
@@ -310,25 +259,36 @@ function EventDetailModal({
     );
 }
 
-/* ── Schedule Event Modal (Create) ── */
-function CreateEventScheduleModal({
+/* ── Create/Schedule Event Modal (with WheelPicker) ── */
+function CreateEventModal({
     open, onClose, onSave, staffList
 }: {
     open: boolean;
     onClose: () => void;
-    onSave: (data: Partial<EventSchedule>) => Promise<void>;
+    onSave: (data: Partial<ClubEvent>) => Promise<void>;
     staffList: AppUser[];
 }) {
-    const [eventName, setEventName] = useState('');
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
     const [genre, setGenre] = useState('');
-    const [date, setDate] = useState(formatDateKey(new Date()));
-    const [startTime, setStartTime] = useState('22:00');
-    const [endTime, setEndTime] = useState('02:00');
     const [djId, setDjId] = useState('');
     const [hostId, setHostId] = useState('');
     const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    // Staff eligible for DJ: role=dj OR has dj in secondaryRoles (include all roles)
+    const [startDate, setStartDate] = useState(() => {
+        const d = new Date();
+        d.setHours(22, 0, 0, 0);
+        return d;
+    });
+    const [endDate, setEndDate] = useState(() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 1);
+        d.setHours(2, 0, 0, 0);
+        return d;
+    });
+
+    // Staff eligible for DJ/Host
     const djCandidates = useMemo(() => staffList.filter(u =>
         u.role === 'dj' || u.secondaryRoles?.includes('dj') ||
         u.role === 'owner' || u.role === 'super_admin'
@@ -339,29 +299,38 @@ function CreateEventScheduleModal({
         u.role === 'owner' || u.role === 'super_admin'
     ), [staffList]);
 
-    const selectedDj = staffList.find(s => s.uid === djId);
-    const selectedHost = staffList.find(s => s.uid === hostId);
-
     async function handleSave() {
-        if (!eventName.trim() || !djId || !hostId) return;
+        if (!name.trim()) return;
+        setError(null);
         setSaving(true);
         try {
+            const dateStr = startDate.toISOString().split('T')[0];
+            const startTime = startDate.toTimeString().slice(0, 5);
+            const endTime = endDate.toTimeString().slice(0, 5);
+            const selectedDj = staffList.find(s => s.uid === djId);
+            const selectedHost = staffList.find(s => s.uid === hostId);
+
             await onSave({
-                eventName: eventName.trim(),
-                genre: genre.trim(),
-                date,
+                name: name.trim(),
+                description: description.trim(),
+                genre: genre.trim() || undefined,
+                date: dateStr,
                 startTime,
                 endTime,
-                djId,
-                djName: selectedDj?.displayName || '',
-                djResponse: 'pending',
-                hostId,
-                hostName: selectedHost?.displayName || '',
-                hostResponse: 'pending',
+                djId: djId || undefined,
+                djName: selectedDj?.displayName || undefined,
+                djResponse: djId ? 'pending' : undefined,
+                hostId: hostId || undefined,
+                hostName: selectedHost?.displayName || undefined,
+                hostResponse: hostId ? 'pending' : undefined,
                 status: 'scheduled',
             });
-            setEventName(''); setGenre(''); setDjId(''); setHostId('');
+            // Reset form
+            setName(''); setDescription(''); setGenre(''); setDjId(''); setHostId('');
             onClose();
+        } catch (err) {
+            console.error('[CreateEvent] Failed to save:', err);
+            setError(err instanceof Error ? err.message : 'Failed to create event. Check console.');
         } finally {
             setSaving(false);
         }
@@ -373,79 +342,74 @@ function CreateEventScheduleModal({
         color: '#fff', fontSize: 13, outline: 'none',
     };
 
-    const selectStyle: React.CSSProperties = {
-        ...inputStyle,
-        appearance: 'none' as const,
-    };
-
     return (
-        <Modal open={open} onClose={onClose} title="Schedule Event" maxWidth={500}>
+        <Modal open={open} onClose={onClose} title="Schedule Event" maxWidth={520}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {error && (
+                    <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#ef4444' }}>
+                        <AlertTriangle size={14} /> {error}
+                    </div>
+                )}
+
                 <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Event Name</label>
-                    <input value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Neon Nights" style={inputStyle} />
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Event Name *</label>
+                    <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Neon Nights" style={inputStyle} />
+                </div>
+
+                <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Description</label>
+                    <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the vibe..." style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} />
                 </div>
 
                 <div>
                     <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Genre</label>
-                    <input value={genre} onChange={e => setGenre(e.target.value)} placeholder="e.g. House, Techno, EDM" style={inputStyle} />
+                    <input value={genre} onChange={e => setGenre(e.target.value)} placeholder="e.g. House, Techno" style={inputStyle} />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                    <div>
-                        <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Date</label>
-                        <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
-                    </div>
-                    <div>
-                        <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Start</label>
-                        <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={inputStyle} />
-                    </div>
-                    <div>
-                        <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>End</label>
-                        <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={inputStyle} />
-                    </div>
-                </div>
+                {/* WheelPicker DateRange */}
+                <DateRangePicker
+                    startDate={startDate}
+                    endDate={endDate}
+                    onChange={(s, e) => { setStartDate(s); setEndDate(e); }}
+                    isRange={true}
+                />
 
-                {/* DJ Picker */}
-                <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
-                        <Headphones size={11} style={{ display: 'inline', marginRight: 4 }} /> Assign DJ
-                    </label>
-                    <select value={djId} onChange={e => setDjId(e.target.value)} style={selectStyle}>
-                        <option value="">Select DJ...</option>
-                        {djCandidates.map(s => (
-                            <option key={s.uid} value={s.uid}>{s.displayName} ({ROLE_CONFIG[s.role]?.label})</option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Host Picker */}
-                <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>
-                        <Mic size={11} style={{ display: 'inline', marginRight: 4 }} /> Assign Host
-                    </label>
-                    <select value={hostId} onChange={e => setHostId(e.target.value)} style={selectStyle}>
-                        <option value="">Select Host...</option>
-                        {hostCandidates.map(s => (
-                            <option key={s.uid} value={s.uid}>{s.displayName} ({ROLE_CONFIG[s.role]?.label})</option>
-                        ))}
-                    </select>
+                {/* Staff Pickers */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Headphones size={11} /> DJ
+                        </label>
+                        <select value={djId} onChange={e => setDjId(e.target.value)} style={{ ...inputStyle, appearance: 'none' as const }}>
+                            <option value="">Select DJ...</option>
+                            {djCandidates.map(s => (
+                                <option key={s.uid} value={s.uid}>{s.displayName} ({ROLE_CONFIG[s.role]?.label})</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Mic size={11} /> Host
+                        </label>
+                        <select value={hostId} onChange={e => setHostId(e.target.value)} style={{ ...inputStyle, appearance: 'none' as const }}>
+                            <option value="">Select Host...</option>
+                            {hostCandidates.map(s => (
+                                <option key={s.uid} value={s.uid}>{s.displayName} ({ROLE_CONFIG[s.role]?.label})</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                    <button onClick={onClose} style={{
-                        flex: 1, padding: 12, borderRadius: 10,
-                        background: 'rgba(255,255,255,0.05)', border: 'none',
-                        color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13,
-                    }}>Cancel</button>
-                    <button onClick={handleSave} disabled={!eventName.trim() || !djId || !hostId || saving} style={{
+                    <button onClick={onClose} style={{ flex: 1, padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+                    <button onClick={handleSave} disabled={!name.trim() || saving} style={{
                         flex: 1, padding: 12, borderRadius: 10,
                         background: 'linear-gradient(135deg, rgba(0,240,255,0.2), rgba(192,132,252,0.2))',
                         border: '1px solid rgba(0,240,255,0.3)',
                         color: '#00f0ff', fontWeight: 600, cursor: 'pointer', fontSize: 13,
-                        opacity: (!eventName.trim() || !djId || !hostId || saving) ? 0.5 : 1,
+                        opacity: (!name.trim() || saving) ? 0.5 : 1,
                     }}>
-                        {saving ? 'Scheduling...' : 'Schedule Event'}
+                        {saving ? 'Creating...' : 'Create & Schedule'}
                     </button>
                 </div>
             </div>
@@ -453,28 +417,40 @@ function CreateEventScheduleModal({
     );
 }
 
-/* ── Main Schedule Page ── */
+/* ══════════════════════════════════════════════════════════════════
+   MAIN SCHEDULE PAGE
+   ══════════════════════════════════════════════════════════════════ */
 export default function SchedulePage() {
     const { appUser } = useAuth();
     const { can } = useRole();
     const [currentWeek, setCurrentWeek] = useState(getStartOfWeek(new Date()));
-    const [schedules, setSchedules] = useState<EventSchedule[]>([]);
+    const [events, setEvents] = useState<ClubEvent[]>([]);
     const [staffList, setStaffList] = useState<AppUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
-    const [selectedEvent, setSelectedEvent] = useState<EventSchedule | null>(null);
+    const [selectedEvent, setSelectedEvent] = useState<ClubEvent | null>(null);
+    const [showFullDay, setShowFullDay] = useState(false);
+    const [postingRoster, setPostingRoster] = useState(false);
+    const [autoAssigning, setAutoAssigning] = useState(false);
+    const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    const visibleHours = useMemo(() => getVisibleHours(showFullDay), [showFullDay]);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
+            // Fetch from unified `events` collection
+            const eventsSnap = await getDocs(query(collection(db, 'events'), orderBy('date', 'asc')));
+            const fetchedEvents = eventsSnap.docs.map(d => ({ id: d.id, ...d.data() } as ClubEvent));
+            setEvents(fetchedEvents);
+            console.log(`[Schedule] Fetched ${fetchedEvents.length} events from Firestore`);
+
             if (can('manager')) {
                 const usersSnap = await getDocs(query(collection(db, 'users')));
                 setStaffList(usersSnap.docs.map(d => ({ uid: d.id, ...d.data() } as AppUser)));
             }
-            const schedSnap = await getDocs(collection(db, 'eventSchedules'));
-            setSchedules(schedSnap.docs.map(d => ({ id: d.id, ...d.data() } as EventSchedule)));
         } catch (e) {
-            console.error('Failed to fetch schedule:', e);
+            console.error('[Schedule] Failed to fetch:', e);
         } finally {
             setLoading(false);
         }
@@ -482,49 +458,52 @@ export default function SchedulePage() {
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
-    const handleCreate = async (data: Partial<EventSchedule>) => {
+    const handleCreate = async (data: Partial<ClubEvent>) => {
         if (!appUser) return;
-        const docRef = await addDoc(collection(db, 'eventSchedules'), {
-            ...data, createdBy: appUser.uid, createdAt: new Date().toISOString(),
+        console.log('[Schedule] Creating event:', data);
+        const docRef = await addDoc(collection(db, 'events'), {
+            ...data,
+            createdBy: appUser.uid,
+            createdAt: new Date().toISOString(),
         });
-        setSchedules(prev => [...prev, { id: docRef.id, ...data } as EventSchedule]);
+        console.log('[Schedule] Created event:', docRef.id);
+        // Re-fetch to ensure consistency
+        await fetchData();
     };
 
     const handleRespond = async (eventId: string, role: 'dj' | 'host', response: string, message?: string) => {
         const field = role === 'dj' ? 'djResponse' : 'hostResponse';
         const msgField = role === 'dj' ? 'djMessage' : 'hostMessage';
-        const updates: any = { [field]: response };
+        const updates: Record<string, string> = { [field]: response };
         if (message) updates[msgField] = message;
 
-        await updateDoc(doc(db, 'eventSchedules', eventId), updates);
-        setSchedules(prev => prev.map(s => s.id === eventId ? { ...s, ...updates } : s));
+        await updateDoc(doc(db, 'events', eventId), updates);
+        setEvents(prev => prev.map(s => s.id === eventId ? { ...s, ...updates } : s));
         setSelectedEvent(prev => prev && prev.id === eventId ? { ...prev, ...updates } : prev);
     };
 
     const handleDelete = async (eventId: string) => {
-        await deleteDoc(doc(db, 'eventSchedules', eventId));
-        setSchedules(prev => prev.filter(s => s.id !== eventId));
+        await deleteDoc(doc(db, 'events', eventId));
+        setEvents(prev => prev.filter(s => s.id !== eventId));
     };
 
-    /* ── Calendar rendering ── */
+    /* ── Week data ── */
     const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(currentWeek, i)), [currentWeek]);
 
-    // Get my upcoming events (for staff view)
     const myEvents = useMemo(() => {
         if (!appUser) return [];
-        return schedules.filter(s => s.djId === appUser.uid || s.hostId === appUser.uid)
+        return events.filter(e => e.djId === appUser.uid || e.hostId === appUser.uid)
             .sort((a, b) => a.date.localeCompare(b.date));
-    }, [schedules, appUser]);
+    }, [events, appUser]);
 
-    // Pending responses for current user
     const pendingCount = useMemo(() => {
         if (!appUser) return 0;
-        return schedules.filter(s => {
-            if (s.djId === appUser.uid && s.djResponse === 'pending') return true;
-            if (s.hostId === appUser.uid && s.hostResponse === 'pending') return true;
+        return events.filter(e => {
+            if (e.djId === appUser.uid && e.djResponse === 'pending') return true;
+            if (e.hostId === appUser.uid && e.hostResponse === 'pending') return true;
             return false;
         }).length;
-    }, [schedules, appUser]);
+    }, [events, appUser]);
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -533,53 +512,101 @@ export default function SchedulePage() {
                 <div>
                     <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>Schedule</h1>
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                        {schedules.length} events scheduled
-                        {pendingCount > 0 && <span style={{ color: '#fbbf24', marginLeft: 8 }}>· {pendingCount} awaiting your response</span>}
+                        {events.length} events
+                        {pendingCount > 0 && <span style={{ color: '#fbbf24', marginLeft: 8 }}>· {pendingCount} awaiting response</span>}
                     </p>
                 </div>
 
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    {/* Week Navigator */}
-                    <div style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.06)',
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Full day toggle */}
+                    <button onClick={() => setShowFullDay(p => !p)} style={{
+                        padding: '6px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                        background: showFullDay ? 'rgba(0,240,255,0.1)' : 'rgba(255,255,255,0.03)',
+                        color: showFullDay ? '#00f0ff' : 'var(--text-muted)',
+                        fontSize: 11, cursor: 'pointer', fontWeight: 500,
                     }}>
-                        <button onClick={() => setCurrentWeek(prev => addDays(prev, -7))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 2 }}>
-                            <ArrowLeft size={14} />
-                        </button>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
-                            <Calendar size={13} color="var(--neon-cyan)" />
+                        {showFullDay ? '24h View' : '12–06 View'}
+                    </button>
+
+                    {/* Week nav */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.03)', padding: '6px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.06)' }}>
+                        <button onClick={() => setCurrentWeek(p => addDays(p, -7))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 2 }}><ArrowLeft size={14} /></button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+                            <Calendar size={12} color="var(--neon-cyan)" />
                             {currentWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – {addDays(currentWeek, 6).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </div>
-                        <button onClick={() => setCurrentWeek(prev => addDays(prev, 7))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 2 }}>
-                            <ArrowRight size={14} />
-                        </button>
+                        <button onClick={() => setCurrentWeek(p => addDays(p, 7))} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: 2 }}><ArrowRight size={14} /></button>
                     </div>
 
                     {can('manager') && (
-                        <button onClick={() => setIsCreateOpen(true)} style={{
-                            display: 'flex', alignItems: 'center', gap: 6,
-                            padding: '8px 16px', borderRadius: 10,
-                            background: 'linear-gradient(135deg, rgba(0,240,255,0.12), rgba(192,132,252,0.12))',
-                            border: '1px solid rgba(0,240,255,0.25)',
-                            color: '#00f0ff', fontWeight: 600, fontSize: 13, cursor: 'pointer',
-                        }}>
-                            <Plus size={15} /> Schedule Event
-                        </button>
+                        <>
+                            <button onClick={async () => {
+                                setPostingRoster(true); setActionMsg(null);
+                                try {
+                                    const weekDate = currentWeek.toISOString().split('T')[0];
+                                    const res = await fetch('/api/schedule/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekDate }) });
+                                    const data = await res.json();
+                                    if (res.ok) setActionMsg({ type: 'success', text: `Roster posted! (${data.eventsCount} events)` });
+                                    else setActionMsg({ type: 'error', text: data.error || 'Failed to post roster' });
+                                } catch { setActionMsg({ type: 'error', text: 'Network error posting roster' }); }
+                                finally { setPostingRoster(false); setTimeout(() => setActionMsg(null), 4000); }
+                            }} disabled={postingRoster} style={{
+                                display: 'flex', alignItems: 'center', gap: 5,
+                                padding: '6px 12px', borderRadius: 8,
+                                background: 'rgba(88,101,242,0.12)', border: '1px solid rgba(88,101,242,0.25)',
+                                color: '#7289da', fontWeight: 500, fontSize: 11, cursor: 'pointer',
+                                opacity: postingRoster ? 0.5 : 1,
+                            }}>
+                                <Send size={12} /> {postingRoster ? 'Posting...' : 'Post Roster'}
+                            </button>
+
+                            <button onClick={async () => {
+                                setAutoAssigning(true); setActionMsg(null);
+                                try {
+                                    const res = await fetch('/api/schedule/auto-assign', { method: 'POST' });
+                                    const data = await res.json();
+                                    if (res.ok) {
+                                        const count = data.proposals?.length || 0;
+                                        setActionMsg({ type: 'success', text: `${count} assignments proposed. Check ${count > 0 ? 'console' : 'availability first'}.` });
+                                        console.log('[AutoAssign] Proposals:', data.proposals);
+                                    } else setActionMsg({ type: 'error', text: data.error || 'Failed to auto-assign' });
+                                } catch { setActionMsg({ type: 'error', text: 'Network error auto-assigning' }); }
+                                finally { setAutoAssigning(false); setTimeout(() => setActionMsg(null), 5000); }
+                            }} disabled={autoAssigning} style={{
+                                display: 'flex', alignItems: 'center', gap: 5,
+                                padding: '6px 12px', borderRadius: 8,
+                                background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
+                                color: '#fbbf24', fontWeight: 500, fontSize: 11, cursor: 'pointer',
+                                opacity: autoAssigning ? 0.5 : 1,
+                            }}>
+                                <Sparkles size={12} /> {autoAssigning ? 'Assigning...' : 'Auto-Assign'}
+                            </button>
+
+                            <button onClick={() => setIsCreateOpen(true)} style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                padding: '8px 16px', borderRadius: 10,
+                                background: 'linear-gradient(135deg, rgba(0,240,255,0.12), rgba(192,132,252,0.12))',
+                                border: '1px solid rgba(0,240,255,0.25)',
+                                color: '#00f0ff', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                            }}>
+                                <Plus size={15} /> Schedule Event
+                            </button>
+                        </>
                     )}
                 </div>
             </div>
 
-            {/* Pending responses banner */}
+            {/* Action message toast */}
+            {actionMsg && (
+                <div style={{ padding: '10px 16px', borderRadius: 12, background: actionMsg.type === 'success' ? 'rgba(74,222,128,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${actionMsg.type === 'success' ? 'rgba(74,222,128,0.2)' : 'rgba(239,68,68,0.2)'}`, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: actionMsg.type === 'success' ? '#4ade80' : '#ef4444' }}>
+                    {actionMsg.type === 'success' ? '✅' : '❌'} {actionMsg.text}
+                </div>
+            )}
+
+            {/* Pending banner */}
             {pendingCount > 0 && (
-                <div style={{
-                    padding: '10px 16px', borderRadius: 12,
-                    background: 'rgba(251, 191, 36, 0.08)', border: '1px solid rgba(251, 191, 36, 0.2)',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    fontSize: 13, color: '#fbbf24',
-                }}>
-                    ⚡ You have {pendingCount} event{pendingCount > 1 ? 's' : ''} awaiting your response
+                <div style={{ padding: '10px 16px', borderRadius: 12, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#fbbf24' }}>
+                    ⚡ {pendingCount} event{pendingCount > 1 ? 's' : ''} awaiting your response
                 </div>
             )}
 
@@ -590,38 +617,38 @@ export default function SchedulePage() {
                 <div style={{
                     background: 'rgba(255,255,255,0.02)',
                     border: '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: 16, overflow: 'hidden',
+                    borderRadius: 16, overflow: 'auto',
+                    maxHeight: '70vh',
                 }}>
                     <div style={{
                         display: 'grid',
                         gridTemplateColumns: '50px repeat(7, 1fr)',
-                        minHeight: 0,
+                        minWidth: 700,
                     }}>
-                        {/* Header Row */}
-                        <div style={{ padding: 8, borderBottom: '1px solid rgba(255,255,255,0.06)' }} />
+                        {/* Header Row (sticky) */}
+                        <div style={{ padding: 8, borderBottom: '1px solid rgba(255,255,255,0.06)', position: 'sticky', top: 0, zIndex: 20, background: 'rgba(15,15,30,0.95)' }} />
                         {weekDays.map(d => {
-                            const isToday = formatDateKey(d) === formatDateKey(new Date());
+                            const isToday = fmtDateKey(d) === fmtDateKey(new Date());
                             return (
                                 <div key={d.toISOString()} style={{
                                     padding: '10px 4px', textAlign: 'center',
                                     borderBottom: '1px solid rgba(255,255,255,0.06)',
                                     borderLeft: '1px solid rgba(255,255,255,0.04)',
-                                    background: isToday ? 'rgba(0, 240, 255, 0.04)' : 'transparent',
+                                    background: isToday ? 'rgba(0,240,255,0.04)' : 'rgba(15,15,30,0.95)',
+                                    position: 'sticky', top: 0, zIndex: 20,
                                 }}>
                                     <div style={{ fontSize: 10, color: isToday ? '#00f0ff' : 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
                                         {d.toLocaleDateString('en-US', { weekday: 'short' })}
                                     </div>
-                                    <div style={{
-                                        fontSize: 18, fontWeight: 700,
-                                        color: isToday ? '#00f0ff' : 'var(--text-primary)',
-                                        marginTop: 2,
-                                    }}>{d.getDate()}</div>
+                                    <div style={{ fontSize: 18, fontWeight: 700, color: isToday ? '#00f0ff' : 'var(--text-primary)', marginTop: 2 }}>
+                                        {d.getDate()}
+                                    </div>
                                 </div>
                             );
                         })}
 
-                        {/* Time rows — evening only */}
-                        {HOURS.map(h => (
+                        {/* Time rows */}
+                        {visibleHours.map(h => (
                             <React.Fragment key={h}>
                                 <div style={{
                                     padding: '4px 6px', fontSize: 10, color: 'var(--text-muted)',
@@ -631,10 +658,10 @@ export default function SchedulePage() {
                                     {h.toString().padStart(2, '0')}:00
                                 </div>
                                 {weekDays.map(day => {
-                                    const dateStr = formatDateKey(day);
-                                    const cellEvents = schedules.filter(s => {
-                                        if (s.date !== dateStr) return false;
-                                        const startH = parseInt(s.startTime.split(':')[0]);
+                                    const dateStr = fmtDateKey(day);
+                                    const cellEvents = events.filter(ev => {
+                                        if (ev.date !== dateStr) return false;
+                                        const startH = parseInt(ev.startTime.split(':')[0]);
                                         return startH === h;
                                     });
 
@@ -656,15 +683,12 @@ export default function SchedulePage() {
                 </div>
             )}
 
-            {/* My Schedule (for non-managers) */}
-            {!can('manager') && myEvents.length > 0 && (
-                <div style={{
-                    background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)',
-                    borderRadius: 16, padding: 20,
-                }}>
+            {/* My schedule section */}
+            {myEvents.length > 0 && (
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 16, padding: 20 }}>
                     <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>My Upcoming Events</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {myEvents.map(ev => {
+                        {myEvents.slice(0, 10).map(ev => {
                             const myRole = ev.djId === appUser?.uid ? 'DJ' : 'Host';
                             const myResp = myRole === 'DJ' ? ev.djResponse : ev.hostResponse;
                             return (
@@ -672,24 +696,19 @@ export default function SchedulePage() {
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                     padding: '12px 16px', borderRadius: 12,
                                     background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)',
-                                    cursor: 'pointer', textAlign: 'left', width: '100%',
-                                    transition: 'all 0.2s',
+                                    cursor: 'pointer', textAlign: 'left', width: '100%', transition: 'all 0.2s',
                                 }}
                                     onMouseOver={e => e.currentTarget.style.borderColor = 'rgba(192,132,252,0.3)'}
                                     onMouseOut={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'}
                                 >
                                     <div>
-                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>{ev.eventName}</div>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>{ev.name}</div>
                                         <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
                                             {ev.date} · {ev.startTime}–{ev.endTime} · {myRole}
                                         </div>
                                     </div>
-                                    <span style={{
-                                        fontSize: 10, padding: '3px 8px', borderRadius: 6,
-                                        color: responseColor(myResp), background: `${responseColor(myResp)}15`,
-                                        fontWeight: 600, textTransform: 'uppercase',
-                                    }}>
-                                        {myResp}
+                                    <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, color: responseColor(myResp), background: `${responseColor(myResp)}15`, fontWeight: 600, textTransform: 'uppercase' }}>
+                                        {myResp || 'none'}
                                     </span>
                                 </button>
                             );
@@ -699,7 +718,7 @@ export default function SchedulePage() {
             )}
 
             {/* Modals */}
-            <CreateEventScheduleModal
+            <CreateEventModal
                 open={isCreateOpen}
                 onClose={() => setIsCreateOpen(false)}
                 onSave={handleCreate}

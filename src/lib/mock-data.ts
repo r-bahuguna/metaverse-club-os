@@ -148,6 +148,9 @@ export const MOCK_EVENTS: ClubEvent[] = [
         hostId: 'staff-005',
         genre: 'Synthwave / Techno',
         isRecurring: true,
+        status: 'confirmed',
+        createdBy: 'staff-001',
+        createdAt: '2026-02-01T00:00:00Z',
     },
     {
         id: 'event-002',
@@ -160,6 +163,9 @@ export const MOCK_EVENTS: ClubEvent[] = [
         hostId: 'staff-005',
         genre: 'House / Deep House',
         isRecurring: true,
+        status: 'scheduled',
+        createdBy: 'staff-001',
+        createdAt: '2026-02-01T00:00:00Z',
     },
     {
         id: 'event-003',
@@ -172,6 +178,9 @@ export const MOCK_EVENTS: ClubEvent[] = [
         hostId: 'staff-006',
         genre: 'Lo-Fi / Chill',
         isRecurring: false,
+        status: 'draft',
+        createdBy: 'staff-002',
+        createdAt: '2026-02-05T00:00:00Z',
     },
 ];
 

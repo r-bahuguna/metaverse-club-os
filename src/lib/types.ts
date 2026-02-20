@@ -67,52 +67,70 @@ export interface StaffMember extends User {
   bio?: string;
 }
 
-/** Schedule shift (legacy) */
+/** Schedule shift (legacy — kept for backward compat) */
 export interface Shift {
   id: string;
   staffId: string;
   staffName: string;
   role: Extract<UserRole, 'dj' | 'host' | 'manager'>;
-  date: string;           // ISO date 
-  startTime: string;      // "22:00"
-  endTime: string;        // "02:00"
+  date: string;
+  startTime: string;
+  endTime: string;
   status: ShiftStatus;
   response: ShiftResponse;
   notes?: string;
 }
 
-/** Event-centric schedule (new model: DJ + Host per event) */
-export interface EventSchedule {
+/** Unified Event — combines event data + scheduling assignments.
+ *  Stored in Firestore `events` collection. */
+export interface ClubEvent {
   id: string;
-  eventId: string;           // Links to events collection
-  eventName: string;
-  date: string;              // YYYY-MM-DD
-  startTime: string;         // "22:00"
-  endTime: string;           // "02:00"
-  djId: string;
-  djName: string;
-  djResponse: ShiftResponse;
-  djMessage?: string;
-  hostId: string;
-  hostName: string;
-  hostResponse: ShiftResponse;
-  hostMessage?: string;
-  status: 'scheduled' | 'confirmed' | 'cancelled' | 'completed';
-  imageUrl?: string;         // Event poster/flyer
+  name: string;
+  description?: string;
   genre?: string;
+  date: string;                  // YYYY-MM-DD
+  startTime: string;             // "22:00"
+  endTime: string;               // "02:00"
+  imageUrl?: string;
+  isRecurring?: boolean;
+  // Scheduling: DJ Assignment
+  djId?: string;
+  djName?: string;
+  djResponse?: ShiftResponse;
+  djMessage?: string;
+  // Scheduling: Host Assignment
+  hostId?: string;
+  hostName?: string;
+  hostResponse?: ShiftResponse;
+  hostMessage?: string;
+  // Status
+  status: 'draft' | 'scheduled' | 'confirmed' | 'live' | 'completed' | 'cancelled';
+  // Metadata
   createdBy: string;
   createdAt: string;
+  updatedAt?: string;
+  rosterPosted?: boolean;
+  notificationsSent?: boolean;
 }
+
+/** Alias for backward compatibility */
+export type EventSchedule = ClubEvent;
 
 /** Staff availability window for smart scheduling */
 export interface Availability {
   id: string;
   staffId: string;
   staffName: string;
-  role: Extract<UserRole, 'dj' | 'host'>;
+  role: string;
+  type?: 'single' | 'range' | 'recurring';
   date: string;
+  startDate?: string;
+  endDate?: string;
   startTime: string;
   endTime: string;
+  recurringDays?: number[];      // [0=Sun, 1=Mon, ...]
+  preferredGenres?: string[];    // DJ specialties
+  createdAt?: string;
 }
 
 /** Proposed pairing from smart scheduler */
@@ -128,20 +146,7 @@ export interface SchedulePairing {
   status: 'proposed' | 'approved' | 'rejected';
 }
 
-/** Event listing */
-export interface ClubEvent {
-  id: string;
-  name: string;
-  description: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  djId?: string;
-  hostId?: string;
-  genre?: string;
-  coverImage?: string;
-  isRecurring: boolean;
-}
+/* ClubEvent is now defined above as the unified event + scheduling interface */
 
 /** Tip transaction */
 export interface TipRecord {

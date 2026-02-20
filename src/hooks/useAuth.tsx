@@ -78,7 +78,12 @@ async function fetchAppUser(uid: string): Promise<AppUser | null> {
 
 /* ── Web session presence helpers ── */
 async function setPresence(uid: string, status: 'online' | 'away' | 'offline') {
-    try { await updateDoc(doc(db, 'users', uid), { onlineStatus: status }); } catch { /* silent */ }
+    try {
+        await updateDoc(doc(db, 'users', uid), {
+            onlineStatus: status,
+            lastSeen: new Date().toISOString(),
+        });
+    } catch { /* silent */ }
 }
 
 /* ── Provider ── */
@@ -93,13 +98,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setFirebaseUser(fbUser);
 
             if (fbUser && !fbUser.isAnonymous) {
-                // Authenticated user — resolve Firestore profile
                 const profile = await fetchAppUser(fbUser.uid);
                 setAppUser(profile);
-                // Set presence to online
                 setPresence(fbUser.uid, 'online');
             } else {
-                // Anonymous or no user
                 setAppUser(null);
             }
 
@@ -108,25 +110,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return () => unsubscribe();
     }, []);
 
-    /* Web session presence: track tab visibility + page close */
+    /* Web presence: heartbeat every 2 min + visibility tracking + reliable unload */
     useEffect(() => {
         if (!firebaseUser || firebaseUser.isAnonymous) return;
         const uid = firebaseUser.uid;
 
+        // Heartbeat: update lastSeen every 2 minutes while page is visible
+        const heartbeat = setInterval(() => {
+            if (!document.hidden) {
+                setPresence(uid, 'online');
+            }
+        }, 2 * 60 * 1000); // Every 2 minutes
+
         const handleVisibility = () => {
             setPresence(uid, document.hidden ? 'away' : 'online');
         };
+
         const handleUnload = () => {
-            // Use sendBeacon for reliability on page close
-            const url = `https://firestore.googleapis.com/v1/projects/risky-desires/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=onlineStatus`;
-            // Fallback: just try updateDoc (may or may not complete)
-            setPresence(uid, 'offline');
+            // Use sendBeacon for reliable offline on page close
+            try {
+                const url = `https://firestore.googleapis.com/v1/projects/risky-desires/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=onlineStatus&updateMask.fieldPaths=lastSeen`;
+                const body = JSON.stringify({
+                    fields: {
+                        onlineStatus: { stringValue: 'offline' },
+                        lastSeen: { stringValue: new Date().toISOString() },
+                    }
+                });
+                navigator.sendBeacon(url, body);
+            } catch {
+                // Fallback
+                setPresence(uid, 'offline');
+            }
         };
 
         document.addEventListener('visibilitychange', handleVisibility);
         window.addEventListener('beforeunload', handleUnload);
 
         return () => {
+            clearInterval(heartbeat);
             document.removeEventListener('visibilitychange', handleVisibility);
             window.removeEventListener('beforeunload', handleUnload);
         };

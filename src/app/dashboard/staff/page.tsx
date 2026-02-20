@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Headphones, Mic, UserCog, Shield, Crown, Star, Plus, ShieldCheck, Search, Filter, Users } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import { useAuth } from '@/hooks/useAuth';
-import { usePresence, getPresenceColor, getPresenceLabel, PresenceStatus } from '@/hooks/usePresence';
+import { usePresence, getDiscordColor, getDiscordLabel, DiscordStatus, UserPresence } from '@/hooks/usePresence';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import GlassCard from '@/components/ui/GlassCard';
@@ -50,12 +50,12 @@ const FILTER_TABS: { key: FilterCategory; label: string; icon: React.ReactNode }
     { key: 'online', label: 'Online', icon: <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80' }} /> },
 ];
 
-/* ── Presence Dot ── */
-function PresenceDot({ status, size = 10 }: { status: PresenceStatus; size?: number }) {
-    const color = getPresenceColor(status);
+/* ── Discord Presence Dot ── */
+function DiscordDot({ status, size = 10 }: { status: DiscordStatus; size?: number }) {
+    const color = getDiscordColor(status);
     return (
         <div
-            title={getPresenceLabel(status)}
+            title={`Discord: ${getDiscordLabel(status)}`}
             style={{
                 width: size, height: size, borderRadius: '50%',
                 background: color,
@@ -68,18 +68,41 @@ function PresenceDot({ status, size = 10 }: { status: PresenceStatus; size?: num
     );
 }
 
+/* ── Web Presence Badge (corner glow) ── */
+function WebBadge({ isOnWebsite }: { isOnWebsite: boolean }) {
+    if (!isOnWebsite) return null;
+    return (
+        <div style={{
+            position: 'absolute', top: -3, right: -3,
+            fontSize: 7, fontWeight: 700, letterSpacing: '0.04em',
+            padding: '1px 4px', borderRadius: 4,
+            background: 'rgba(0, 240, 255, 0.15)',
+            border: '1px solid rgba(0, 240, 255, 0.3)',
+            color: '#00f0ff',
+            textTransform: 'uppercase',
+            boxShadow: '0 0 8px rgba(0, 240, 255, 0.2)',
+            lineHeight: 1.3,
+            whiteSpace: 'nowrap',
+        }}>
+            WEB
+        </div>
+    );
+}
+
 /* ── Staff Card ── */
-function StaffCard({ member, presence }: { member: AppUser; presence: PresenceStatus }) {
+function StaffCard({ member, presence }: { member: AppUser; presence: UserPresence }) {
     const config = ROLE_CONFIG[member.role] || ROLE_CONFIG.member;
+    const { discordStatus, isOnWebsite } = presence;
     return (
         <div style={{
             display: 'flex', gap: 14, alignItems: 'center',
             padding: '16px 20px',
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.06)',
+            background: isOnWebsite ? 'rgba(0, 240, 255, 0.02)' : 'rgba(255,255,255,0.02)',
+            border: `1px solid ${isOnWebsite ? 'rgba(0, 240, 255, 0.08)' : 'rgba(255,255,255,0.06)'}`,
             borderRadius: 16,
             transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
             cursor: 'default',
+            position: 'relative',
         }}
             onMouseOver={e => {
                 e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
@@ -87,24 +110,27 @@ function StaffCard({ member, presence }: { member: AppUser; presence: PresenceSt
                 e.currentTarget.style.transform = 'translateY(-1px)';
             }}
             onMouseOut={e => {
-                e.currentTarget.style.background = 'rgba(255,255,255,0.02)';
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)';
+                e.currentTarget.style.background = isOnWebsite ? 'rgba(0, 240, 255, 0.02)' : 'rgba(255,255,255,0.02)';
+                e.currentTarget.style.borderColor = isOnWebsite ? 'rgba(0, 240, 255, 0.08)' : 'rgba(255,255,255,0.06)';
                 e.currentTarget.style.transform = 'translateY(0)';
             }}
         >
-            {/* Avatar with presence */}
+            {/* 'On Website' corner badge */}
+            <WebBadge isOnWebsite={isOnWebsite} />
+
+            {/* Avatar with Discord presence dot */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
                 <div style={{
                     width: 44, height: 44, borderRadius: 14,
                     background: roleGradients[member.role] || 'rgba(255,255,255,0.1)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 17, fontWeight: 700, color: '#fff',
-                    boxShadow: `0 0 12px ${getPresenceColor(presence)}22`,
+                    boxShadow: `0 0 12px ${getDiscordColor(discordStatus)}22`,
                 }}>
                     {member.displayName.charAt(0).toUpperCase()}
                 </div>
                 <div style={{ position: 'absolute', bottom: -2, right: -2 }}>
-                    <PresenceDot status={presence} />
+                    <DiscordDot status={discordStatus} />
                 </div>
             </div>
 
@@ -141,12 +167,12 @@ function StaffCard({ member, presence }: { member: AppUser; presence: PresenceSt
                 )}
             </div>
 
-            {/* Status label */}
+            {/* Discord status label */}
             <div style={{
                 fontSize: 10, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em',
-                color: getPresenceColor(presence), flexShrink: 0,
+                color: getDiscordColor(discordStatus), flexShrink: 0,
             }}>
-                {getPresenceLabel(presence)}
+                {getDiscordLabel(discordStatus)}
             </div>
         </div>
     );
@@ -216,21 +242,22 @@ export default function StaffPage() {
         // Category filter
         if (activeFilter === 'online') {
             result = result.filter(m => {
-                const p = presenceMap.get(m.uid) || 'offline';
-                return p === 'online' || p === 'idle' || p === 'dnd';
+                const p = presenceMap.get(m.uid);
+                return p && (p.discordStatus !== 'offline' || p.isOnWebsite);
             });
         } else if (activeFilter !== 'all') {
             const roles = CATEGORY_ROLES[activeFilter];
             result = result.filter(m => roles.includes(m.role));
         }
 
-        // Sort: online first, then by role hierarchy
+        // Sort: web-online first, then discord-online, then by role hierarchy
         result = [...result].sort((a, b) => {
-            const pa = presenceMap.get(a.uid) || 'offline';
-            const pb = presenceMap.get(b.uid) || 'offline';
-            const onlineA = pa !== 'offline' ? 1 : 0;
-            const onlineB = pb !== 'offline' ? 1 : 0;
-            if (onlineB !== onlineA) return onlineB - onlineA;
+            const pa = presenceMap.get(a.uid);
+            const pb = presenceMap.get(b.uid);
+            // Web presence > Discord online > offline
+            const scoreA = (pa?.isOnWebsite ? 3 : 0) + (pa?.discordStatus !== 'offline' ? 1 : 0);
+            const scoreB = (pb?.isOnWebsite ? 3 : 0) + (pb?.discordStatus !== 'offline' ? 1 : 0);
+            if (scoreB !== scoreA) return scoreB - scoreA;
             return ROLE_HIERARCHY.indexOf(b.role) - ROLE_HIERARCHY.indexOf(a.role);
         });
 
@@ -239,7 +266,7 @@ export default function StaffPage() {
 
     /* ── Group staff by role category ── */
     const groups = useMemo(() => {
-        if (activeFilter !== 'all' && activeFilter !== 'online') return null; // No grouping when filtered by category
+        if (activeFilter !== 'all' && activeFilter !== 'online') return null;
 
         const management = filteredStaff.filter(m => ['super_admin', 'owner', 'general_manager', 'manager'].includes(m.role));
         const djs = filteredStaff.filter(m => m.role === 'dj');
@@ -256,8 +283,8 @@ export default function StaffPage() {
 
     const onlineCount = useMemo(() =>
         staff.filter(m => {
-            const p = presenceMap.get(m.uid) || 'offline';
-            return p !== 'offline';
+            const p = presenceMap.get(m.uid);
+            return p && (p.discordStatus !== 'offline' || p.isOnWebsite);
         }).length
         , [staff, presenceMap]);
 
@@ -367,7 +394,7 @@ export default function StaffPage() {
                                     <StaffCard
                                         key={member.uid}
                                         member={member}
-                                        presence={presenceMap.get(member.uid) || 'offline'}
+                                        presence={presenceMap.get(member.uid) || { discordStatus: 'offline' as const, isOnWebsite: false }}
                                     />
                                 ))}
                             </div>
@@ -381,7 +408,7 @@ export default function StaffPage() {
                         <StaffCard
                             key={member.uid}
                             member={member}
-                            presence={presenceMap.get(member.uid) || 'offline'}
+                            presence={presenceMap.get(member.uid) || { discordStatus: 'offline' as const, isOnWebsite: false }}
                         />
                     ))}
                 </div>

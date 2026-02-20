@@ -1,17 +1,26 @@
 'use client';
 
 /* ==========================================================================
-   usePresence — Hybrid presence detection
-   Merges Discord Widget API status + Firestore web session status.
+   usePresence — Dual presence detection
    
-   Discord API polled every 60s. Returns a map of uid → PresenceStatus.
+   Returns TWO separate indicators per user:
+   1. Discord status (online/idle/dnd/offline) — from Discord Widget API
+   2. Web presence (boolean) — from Firestore onlineStatus + lastSeen timestamp
+   
+   Discord API polled every 60s. Web presence uses heartbeat + staleness check.
    ========================================================================== */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { DISCORD } from '@/lib/constants';
-import { AppUser, OnlineStatus } from '@/lib/types';
+import { AppUser } from '@/lib/types';
 
-export type PresenceStatus = 'online' | 'idle' | 'dnd' | 'offline';
+export type DiscordStatus = 'online' | 'idle' | 'dnd' | 'offline';
+
+export interface UserPresence {
+    discordStatus: DiscordStatus;    // From Discord Widget API
+    isOnWebsite: boolean;            // From Firestore heartbeat
+    lastSeen?: string;               // ISO timestamp of last heartbeat
+}
 
 interface DiscordMember {
     id: string;
@@ -26,91 +35,102 @@ interface DiscordWidgetData {
     presence_count: number;
 }
 
-/** Maps Discord status → our PresenceStatus */
-function mapDiscordStatus(status: string): PresenceStatus {
-    switch (status) {
-        case 'online': return 'online';
-        case 'idle': return 'idle';
-        case 'dnd': return 'dnd';
-        default: return 'offline';
-    }
-}
+/* Staleness threshold: if lastSeen > 3 minutes ago, consider offline from web */
+const STALE_THRESHOLD_MS = 3 * 60 * 1000;
 
 /**
- * usePresence hook — merges Discord presence with Firestore onlineStatus.
- * 
- * @param staffList - Array of AppUser objects to match against Discord members
- * @returns Map of uid → PresenceStatus, plus Discord member count
+ * usePresence — returns dual presence info for each staff member.
  */
 export function usePresence(staffList: AppUser[]) {
-    const [presenceMap, setPresenceMap] = useState<Map<string, PresenceStatus>>(new Map());
+    const [presenceMap, setPresenceMap] = useState<Map<string, UserPresence>>(new Map());
     const [discordOnlineCount, setDiscordOnlineCount] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    const fetchDiscordPresence = useCallback(async () => {
+    const fetchPresence = useCallback(async () => {
+        const now = Date.now();
+        let discordMembers: DiscordMember[] = [];
+
+        // 1. Fetch Discord presence
         try {
             const res = await fetch(DISCORD.jsonApi, { cache: 'no-store' });
-            if (!res.ok) return;
+            if (res.ok) {
+                const data: DiscordWidgetData = await res.json();
+                discordMembers = data.members;
+                setDiscordOnlineCount(data.presence_count);
+            }
+        } catch (err) {
+            console.warn('[usePresence] Discord API failed:', err);
+        }
 
-            const data: DiscordWidgetData = await res.json();
-            setDiscordOnlineCount(data.presence_count);
+        // 2. Build presence map
+        const newMap = new Map<string, UserPresence>();
 
-            const newMap = new Map<string, PresenceStatus>();
+        for (const user of staffList) {
+            // Discord matching
+            let discordStatus: DiscordStatus = 'offline';
+            for (const dm of discordMembers) {
+                const dName = dm.username.toLowerCase();
+                const displayName = user.displayName?.toLowerCase() || '';
+                const slName = user.slName?.toLowerCase() || '';
+                const discordField = user.discordUsername?.toLowerCase() || '';
 
-            // For each staff member, try to find them in Discord
-            for (const user of staffList) {
-                let matched = false;
-
-                for (const dm of data.members) {
-                    const discordName = dm.username.toLowerCase();
-                    const displayName = user.displayName?.toLowerCase() || '';
-                    const slName = user.slName?.toLowerCase() || '';
-                    const discordField = user.discordUsername?.toLowerCase() || '';
-
-                    // Match by explicit discordUsername field, displayName, or slName
-                    if (
-                        (discordField && discordName === discordField) ||
-                        discordName === displayName ||
-                        discordName === slName
-                    ) {
-                        newMap.set(user.uid, mapDiscordStatus(dm.status));
-                        matched = true;
-                        break;
-                    }
-                }
-
-                // If not found in Discord, fall back to Firestore onlineStatus
-                if (!matched) {
-                    const fsStatus = user.onlineStatus || 'offline';
-                    newMap.set(user.uid, fsStatus === 'away' ? 'idle' : fsStatus as PresenceStatus);
+                if (
+                    (discordField && dName === discordField) ||
+                    dName === displayName ||
+                    dName === slName
+                ) {
+                    discordStatus = dm.status;
+                    break;
                 }
             }
 
-            setPresenceMap(newMap);
-        } catch (err) {
-            console.warn('[usePresence] Discord API fetch failed:', err);
+            // Web presence: check Firestore onlineStatus + lastSeen staleness
+            const fsStatus = user.onlineStatus;
+            const lastSeen = (user as any).lastSeen as string | undefined;
+            let isOnWebsite = false;
+
+            if (fsStatus === 'online') {
+                if (lastSeen) {
+                    const elapsed = now - new Date(lastSeen).getTime();
+                    isOnWebsite = elapsed < STALE_THRESHOLD_MS;
+                } else {
+                    // No lastSeen but status says online — trust it for now
+                    isOnWebsite = true;
+                }
+            }
+            // 'away' with recent lastSeen = still on website but tab hidden
+            if (fsStatus === 'away' && lastSeen) {
+                const elapsed = now - new Date(lastSeen).getTime();
+                isOnWebsite = elapsed < STALE_THRESHOLD_MS;
+            }
+
+            newMap.set(user.uid, {
+                discordStatus,
+                isOnWebsite,
+                lastSeen,
+            });
         }
+
+        setPresenceMap(newMap);
     }, [staffList]);
 
     useEffect(() => {
         if (staffList.length === 0) return;
 
-        // Initial fetch
-        fetchDiscordPresence();
-
-        // Poll every 60 seconds
-        intervalRef.current = setInterval(fetchDiscordPresence, 60_000);
+        fetchPresence();
+        intervalRef.current = setInterval(fetchPresence, 60_000);
 
         return () => {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
-    }, [fetchDiscordPresence, staffList]);
+    }, [fetchPresence, staffList]);
 
     return { presenceMap, discordOnlineCount };
 }
 
-/** Get a display color for presence status */
-export function getPresenceColor(status: PresenceStatus): string {
+/* ── Discord status helpers ── */
+
+export function getDiscordColor(status: DiscordStatus): string {
     switch (status) {
         case 'online': return '#4ade80';
         case 'idle': return '#fbbf24';
@@ -119,12 +139,16 @@ export function getPresenceColor(status: PresenceStatus): string {
     }
 }
 
-/** Get a display label for presence status */
-export function getPresenceLabel(status: PresenceStatus): string {
+export function getDiscordLabel(status: DiscordStatus): string {
     switch (status) {
         case 'online': return 'Online';
         case 'idle': return 'Away';
-        case 'dnd': return 'Do Not Disturb';
+        case 'dnd': return 'Busy';
         case 'offline': return 'Offline';
     }
 }
+
+/* ── Backward compat aliases ── */
+export type PresenceStatus = DiscordStatus;
+export const getPresenceColor = getDiscordColor;
+export const getPresenceLabel = getDiscordLabel;

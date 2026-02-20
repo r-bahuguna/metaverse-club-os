@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { X, Calendar, Clock, Loader2, Save, Upload } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { X, Calendar, Clock, Loader2, Save, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
 import Modal from './Modal';
 import DateRangePicker from './DateRangePicker';
 import { useAuth } from '@/hooks/useAuth';
@@ -34,6 +34,8 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
     const [recurring, setRecurring] = useState(false);
     const [createShifts, setCreateShifts] = useState(false);
     const [saving, setSaving] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
 
     // Filter staff
     const djs = useMemo(() => staffList.filter(u => ['dj', 'manager', 'owner', 'super_admin'].includes(u.role)), [staffList]);
@@ -46,6 +48,7 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
             setDescription(eventToEdit.description);
             setGenre(eventToEdit.genre || '');
             setImageUrl(eventToEdit.imageUrl || '');
+            setImagePreview(eventToEdit.imageUrl || null);
             setDjId(eventToEdit.djId || '');
             setHostId(eventToEdit.hostId || '');
             setRecurring(eventToEdit.isRecurring || false);
@@ -58,16 +61,16 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
                     const [h, m] = eventToEdit.endTime.split(':');
                     const e = new Date(start);
                     e.setHours(parseInt(h), parseInt(m));
-                    if (e < start) e.setDate(e.getDate() + 1); // Crosses midnight
+                    if (e < start) e.setDate(e.getDate() + 1);
                     setEndDate(e);
                 }
             }
         } else if (open && !eventToEdit) {
-            // Reset for Add Mode
             setName('');
             setDescription('');
             setGenre('');
             setImageUrl('');
+            setImagePreview(null);
             setDjId('');
             setHostId('');
             setRecurring(false);
@@ -96,6 +99,9 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
                 hostId,
                 hostName: staffList.find(s => s.uid === hostId)?.displayName || '',
                 isRecurring: recurring,
+                status: eventToEdit?.status || 'scheduled',
+                djResponse: djId ? 'pending' : undefined,
+                hostResponse: hostId ? 'pending' : undefined,
                 updatedAt: new Date().toISOString(),
                 ...(eventToEdit ? {} : { createdBy: appUser.uid, createdAt: new Date().toISOString() })
             };
@@ -190,8 +196,8 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
                     />
                 </div>
 
-                {/* Genre & Image URL */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {/* Genre & Image */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div>
                         <label style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Genre</label>
                         <input
@@ -206,15 +212,62 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
                         />
                     </div>
                     <div>
-                        <label style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Image URL</label>
+                        <label style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Event Image</label>
+                        {imagePreview ? (
+                            <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--glass-border)' }}>
+                                <img src={imagePreview} alt="Event preview" style={{ width: '100%', height: 120, objectFit: 'cover', display: 'block' }} />
+                                <button onClick={() => { setImageUrl(''); setImagePreview(null); }} style={{
+                                    position: 'absolute', top: 6, right: 6,
+                                    width: 24, height: 24, borderRadius: 6,
+                                    background: 'rgba(0,0,0,0.7)', border: 'none',
+                                    color: '#ff6b6b', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                    <Trash2 size={12} />
+                                </button>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button onClick={() => fileInputRef.current?.click()} style={{
+                                    flex: 1, padding: 12, borderRadius: 10,
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px dashed rgba(255,255,255,0.15)',
+                                    color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                }}>
+                                    <Upload size={14} /> Upload Image
+                                </button>
+                                <input
+                                    value={imageUrl} onChange={e => { setImageUrl(e.target.value); if (e.target.value) setImagePreview(e.target.value); }}
+                                    placeholder="or paste URL"
+                                    style={{
+                                        flex: 1, padding: 12, borderRadius: 10,
+                                        background: 'rgba(255,255,255,0.05)',
+                                        border: '1px solid var(--glass-border)',
+                                        color: 'white', fontSize: 12, outline: 'none'
+                                    }}
+                                />
+                            </div>
+                        )}
                         <input
-                            value={imageUrl} onChange={e => setImageUrl(e.target.value)}
-                            placeholder="https://..."
-                            style={{
-                                width: '100%', padding: 12, borderRadius: 10,
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid var(--glass-border)',
-                                color: 'white', fontSize: 14, outline: 'none'
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp,image/gif"
+                            style={{ display: 'none' }}
+                            onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 2 * 1024 * 1024) {
+                                    alert('Image must be under 2MB');
+                                    return;
+                                }
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                    const dataUrl = reader.result as string;
+                                    setImageUrl(dataUrl);
+                                    setImagePreview(dataUrl);
+                                };
+                                reader.readAsDataURL(file);
                             }}
                         />
                     </div>
