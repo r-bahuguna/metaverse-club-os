@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
         /* ── Parse request body ── */
         const body = await req.json();
-        const { displayName, slName, slUuid, role, secondaryRoles } = body;
+        const { displayName, slName, slUuid, role, secondaryRoles, discordUsername } = body;
 
         if (!displayName || !slName || !role) {
             return NextResponse.json({ error: 'Missing required fields: displayName, slName, role' }, { status: 400 });
@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
             displayName,
             slName,
             slUuid: slUuid || '',
+            discordUsername: discordUsername || '',
             role,
             secondaryRoles: secondaryRoles || [],
             mustChangePassword: true,

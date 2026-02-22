@@ -1,16 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Headphones, Mic, UserCog, Shield, Crown, Star, Plus, ShieldCheck, Search, Filter, Users } from 'lucide-react';
+import { Headphones, Mic, UserCog, Shield, Crown, Star, Plus, ShieldCheck, Search, Filter, Users, Pencil } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import { useAuth } from '@/hooks/useAuth';
 import { usePresence, getDiscordColor, getDiscordLabel, DiscordStatus, UserPresence } from '@/hooks/usePresence';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import GlassCard from '@/components/ui/GlassCard';
 import { ROLE_CONFIG, ROLE_HIERARCHY } from '@/lib/constants';
 import { UserRole, AppUser } from '@/lib/types';
 import AddStaffModal from '@/components/ui/AddStaffModal';
+import EditStaffModal from '@/components/ui/EditStaffModal';
 
 /* ── Role icons ── */
 const roleIcons: Record<string, React.ReactNode> = {
@@ -90,7 +91,7 @@ function WebBadge({ isOnWebsite }: { isOnWebsite: boolean }) {
 }
 
 /* ── Staff Card ── */
-function StaffCard({ member, presence }: { member: AppUser; presence: UserPresence }) {
+function StaffCard({ member, presence, onEdit }: { member: AppUser; presence: UserPresence; onEdit?: () => void }) {
     const config = ROLE_CONFIG[member.role] || ROLE_CONFIG.member;
     const { discordStatus, isOnWebsite } = presence;
     return (
@@ -174,6 +175,22 @@ function StaffCard({ member, presence }: { member: AppUser; presence: UserPresen
             }}>
                 {getDiscordLabel(discordStatus)}
             </div>
+
+            {/* Edit button */}
+            {onEdit && (
+                <button onClick={onEdit} title="Edit staff" style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                    color: 'var(--text-muted)', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0, transition: 'all 0.2s ease',
+                }}
+                    onMouseOver={e => { e.currentTarget.style.background = 'rgba(0,240,255,0.1)'; e.currentTarget.style.color = 'var(--neon-cyan)'; }}
+                    onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                >
+                    <Pencil size={12} />
+                </button>
+            )}
         </div>
     );
 }
@@ -201,8 +218,9 @@ function GroupHeader({ icon, label, count }: { icon: React.ReactNode; label: str
 
 /* ── Main Page ── */
 export default function StaffPage() {
-    const { can } = useRole();
+    const { can, isManagement } = useRole();
     const [showAddModal, setShowAddModal] = useState(false);
+    const [editingStaff, setEditingStaff] = useState<AppUser | null>(null);
     const [staff, setStaff] = useState<AppUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -210,20 +228,19 @@ export default function StaffPage() {
 
     const { presenceMap, discordOnlineCount } = usePresence(staff);
 
-    const fetchStaff = useCallback(async () => {
-        try {
-            const q = query(collection(db, 'users'), orderBy('role'));
-            const snap = await getDocs(q);
+    /* Realtime listener — updates instantly when lastSeen/onlineStatus change */
+    useEffect(() => {
+        const q = query(collection(db, 'users'), orderBy('role'));
+        const unsub = onSnapshot(q, (snap) => {
             const users: AppUser[] = snap.docs.map(d => ({ uid: d.id, ...d.data() } as AppUser));
             setStaff(users);
-        } catch (err) {
-            console.warn('[StaffPage] Failed to fetch staff:', err);
-        } finally {
             setLoading(false);
-        }
+        }, (err) => {
+            console.warn('[StaffPage] Firestore listener error:', err);
+            setLoading(false);
+        });
+        return () => unsub();
     }, []);
-
-    useEffect(() => { fetchStaff(); }, [fetchStaff]);
 
     /* ── Filtering + search ── */
     const filteredStaff = useMemo(() => {
@@ -395,6 +412,7 @@ export default function StaffPage() {
                                         key={member.uid}
                                         member={member}
                                         presence={presenceMap.get(member.uid) || { discordStatus: 'offline' as const, isOnWebsite: false }}
+                                        onEdit={isManagement ? () => setEditingStaff(member) : undefined}
                                     />
                                 ))}
                             </div>
@@ -409,6 +427,7 @@ export default function StaffPage() {
                             key={member.uid}
                             member={member}
                             presence={presenceMap.get(member.uid) || { discordStatus: 'offline' as const, isOnWebsite: false }}
+                            onEdit={isManagement ? () => setEditingStaff(member) : undefined}
                         />
                     ))}
                 </div>
@@ -417,7 +436,14 @@ export default function StaffPage() {
             <AddStaffModal
                 open={showAddModal}
                 onClose={() => setShowAddModal(false)}
-                onCreated={fetchStaff}
+                onCreated={() => {/* onSnapshot auto-updates */ }}
+            />
+
+            <EditStaffModal
+                open={!!editingStaff}
+                onClose={() => setEditingStaff(null)}
+                onUpdated={() => {/* onSnapshot auto-updates */ }}
+                staff={editingStaff}
             />
 
             <style>{`

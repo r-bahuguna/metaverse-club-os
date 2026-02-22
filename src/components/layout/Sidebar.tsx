@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     LayoutDashboard, CalendarDays, Users, BarChart3,
-    PartyPopper, Settings, Zap, ChevronLeft, LogOut,
+    PartyPopper, Settings, Zap, ChevronLeft, LogOut, ScrollText,
 } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,6 +33,7 @@ const iconMap: Record<string, React.ReactNode> = {
     BarChart3: <BarChart3 size={20} />,
     PartyPopper: <PartyPopper size={20} />,
     Settings: <Settings size={20} />,
+    ScrollText: <ScrollText size={20} />,
 };
 
 /* Neon Discord logo SVG */

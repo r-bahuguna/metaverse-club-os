@@ -6,6 +6,7 @@ import Modal from './Modal';
 import DateRangePicker from './DateRangePicker';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
+import { uploadEventImage } from '@/lib/storage';
 import { addDoc, collection, updateDoc, doc } from 'firebase/firestore';
 import { AppUser } from '@/lib/types';
 import { ROLE_CONFIG } from '@/lib/constants';
@@ -24,6 +25,7 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
     const [description, setDescription] = useState('');
     const [genre, setGenre] = useState('');
     const [imageUrl, setImageUrl] = useState('');
+    const [imageFile, setImageFile] = useState<File | null>(null);
 
     const [startDate, setStartDate] = useState(new Date());
     const [endDate, setEndDate] = useState(new Date(new Date().setHours(new Date().getHours() + 2)));
@@ -86,11 +88,18 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
         if (!appUser || !name) return;
         setSaving(true);
         try {
+            // Upload image to Firebase Storage if a file was selected
+            let finalImageUrl = imageUrl;
+            if (imageFile) {
+                const tempId = eventToEdit?.id || `evt_${Date.now()}`;
+                finalImageUrl = await uploadEventImage(imageFile, tempId);
+            }
+
             const eventData = {
                 name,
                 description,
                 genre,
-                imageUrl,
+                imageUrl: finalImageUrl,
                 date: startDate.toISOString().split('T')[0],
                 startTime: startDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                 endTime: endDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
@@ -107,10 +116,8 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
             };
 
             if (eventToEdit) {
-                // Update existing
                 await updateDoc(doc(db, 'events', eventToEdit.id), eventData);
             } else {
-                // Create new
                 await addDoc(collection(db, 'events'), eventData);
             }
 
@@ -257,17 +264,15 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
                             onChange={e => {
                                 const file = e.target.files?.[0];
                                 if (!file) return;
-                                if (file.size > 2 * 1024 * 1024) {
-                                    alert('Image must be under 2MB');
+                                if (file.size > 5 * 1024 * 1024) {
+                                    alert('Image must be under 5MB');
                                     return;
                                 }
-                                const reader = new FileReader();
-                                reader.onload = () => {
-                                    const dataUrl = reader.result as string;
-                                    setImageUrl(dataUrl);
-                                    setImagePreview(dataUrl);
-                                };
-                                reader.readAsDataURL(file);
+                                setImageFile(file);
+                                // Show local preview
+                                const url = URL.createObjectURL(file);
+                                setImagePreview(url);
+                                setImageUrl(''); // Will be set after upload
                             }}
                         />
                     </div>

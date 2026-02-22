@@ -122,6 +122,14 @@ export const NAV_ITEMS: NavItem[] = [
         neonColor: 'rgba(255,255,255,0.7)', // white
         requiredRoles: ['super_admin', 'owner', 'general_manager', 'manager', 'dj', 'host', 'vip_member', 'member'],
     },
+    {
+        id: 'logs',
+        label: 'Logs',
+        href: '/dashboard/logs',
+        icon: 'ScrollText',
+        neonColor: '#94a3b8',   // slate
+        requiredRoles: ['super_admin', 'owner'],
+    },
 ];
 
 /** Role hierarchy — higher index = more privileges */

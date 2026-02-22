@@ -15,9 +15,11 @@ import {
 import GlassCard from '@/components/ui/GlassCard';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { useRole } from '@/hooks/useRole';
+import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { ClubEvent } from '@/lib/types';
 import {
     MOCK_DASHBOARD_STATS,
-    MOCK_EVENTS,
     MOCK_TIPS,
     MOCK_TIP_HISTORY,
     MOCK_DJ_BOOTH,
@@ -114,6 +116,64 @@ function TipButton({ label, neonColor, icon: Icon }: { label: string; neonColor:
             <Icon size={13} />
             {tipped ? '❤️ Tipped!' : label}
         </button>
+    );
+}
+
+/* ── Upcoming Events from Firestore ── */
+function UpcomingEventsSection() {
+    const [events, setEvents] = useState<ClubEvent[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchEvents() {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const q = query(collection(db, 'events'), orderBy('date', 'asc'));
+                const snap = await getDocs(q);
+                const upcoming = snap.docs
+                    .map(d => ({ id: d.id, ...d.data() } as ClubEvent))
+                    .filter(e => e.date >= today && e.status !== 'cancelled');
+                setEvents(upcoming.slice(0, 8));
+            } catch (err) {
+                console.warn('[Dashboard] Failed to fetch events:', err);
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchEvents();
+    }, []);
+
+    return (
+        <>
+            <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}>Upcoming Events</h2>
+                <span className={styles.sectionBadge}>{events.length}</span>
+            </div>
+            <div className={styles.eventList}>
+                {loading ? (
+                    <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Loading...</div>
+                ) : events.length === 0 ? (
+                    <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>No upcoming events scheduled.</div>
+                ) : (
+                    events.map(event => {
+                        const { day, month } = formatDate(event.date);
+                        return (
+                            <div key={event.id} className={styles.eventCard}>
+                                <div className={styles.eventDate}>
+                                    <span className={styles.eventDay}>{day}</span>
+                                    <span className={styles.eventMonth}>{month}</span>
+                                </div>
+                                <div className={styles.eventInfo}>
+                                    <div className={styles.eventName}>{event.name}</div>
+                                    <div className={styles.eventTime}>{event.startTime}–{event.endTime}</div>
+                                    {event.genre && <div className={styles.eventGenre}>{event.genre}</div>}
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+        </>
     );
 }
 
@@ -373,29 +433,9 @@ export default function DashboardPage() {
 
                     {/* Upcoming Events — visible to everyone */}
                     <GlassCard>
-                        <div className={styles.sectionHeader}>
-                            <h2 className={styles.sectionTitle}>Upcoming Events</h2>
-                            <span className={styles.sectionBadge}>{MOCK_EVENTS.length}</span>
-                        </div>
-                        <div className={styles.eventList}>
-                            {MOCK_EVENTS.map(event => {
-                                const { day, month } = formatDate(event.date);
-                                return (
-                                    <div key={event.id} className={styles.eventCard}>
-                                        <div className={styles.eventDate}>
-                                            <span className={styles.eventDay}>{day}</span>
-                                            <span className={styles.eventMonth}>{month}</span>
-                                        </div>
-                                        <div className={styles.eventInfo}>
-                                            <div className={styles.eventName}>{event.name}</div>
-                                            <div className={styles.eventTime}>{event.startTime}–{event.endTime}</div>
-                                            {event.genre && <div className={styles.eventGenre}>{event.genre}</div>}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        <UpcomingEventsSection />
                     </GlassCard>
+
                 </div>
 
                 {/* Right Column — Real-Time Stats (staff only) */}

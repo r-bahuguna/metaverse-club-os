@@ -32,8 +32,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if false; // Created via API
       allow delete: if false;
-      allow update: if request.auth.uid == userId && 
-         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['onlineStatus', 'mustChangePassword', 'lastSeen']));
+      // Self can update presence fields
+      allow update: if (request.auth.uid == userId && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['onlineStatus', 'mustChangePassword', 'lastSeen']))
+         // Managers can update any user doc (for edit staff)
+         || (isSignedIn() && isManager());
     }
 
     // Events (unified: event data + scheduling assignments)
@@ -120,6 +123,13 @@ service cloud.firestore {
       allow update: if isSignedIn() && resource.data.userId == request.auth.uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isManager());
+    }
+
+    // Audit Logs: Anyone can create (for logging), Super Admin + Owner read
+    match /audit_logs/{logId} {
+      allow read: if isSignedIn() && (hasRole('super_admin') || hasRole('owner'));
+      allow create: if isSignedIn();
+      allow update, delete: if false;
     }
 
     // Default Deny

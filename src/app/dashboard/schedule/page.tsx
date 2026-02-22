@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Calendar, Clock, Plus, ArrowLeft, ArrowRight, Check, XCircle, MessageSquare, Headphones, Mic, AlertTriangle, Send, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Calendar, Clock, Plus, ArrowLeft, ArrowRight, Check, XCircle, MessageSquare, Headphones, Mic, AlertTriangle, Send, Sparkles, Upload, Trash2, Pencil } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRole } from '@/hooks/useRole';
 import { db } from '@/lib/firebase';
@@ -10,6 +10,8 @@ import Modal from '@/components/ui/Modal';
 import DateRangePicker from '@/components/ui/DateRangePicker';
 import { ClubEvent, AppUser } from '@/lib/types';
 import { ROLE_CONFIG } from '@/lib/constants';
+import { uploadEventImage } from '@/lib/storage';
+import AddEventModal from '@/components/ui/AddEventModal';
 
 /* ── Helpers ── */
 function getStartOfWeek(date: Date) {
@@ -249,6 +251,9 @@ function EventDetailModal({
 
                 {canManage && (
                     <div style={{ display: 'flex', gap: 8, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 16 }}>
+                        <button onClick={() => { onClose(); (event as any).__editRequested = true; }} style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(0,240,255,0.1)', border: '1px solid rgba(0,240,255,0.2)', color: '#00f0ff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Pencil size={12} /> Edit Event
+                        </button>
                         <button onClick={async () => { await onDelete(event.id); onClose(); }} style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                             Cancel Event
                         </button>
@@ -271,6 +276,10 @@ function CreateEventModal({
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [genre, setGenre] = useState('');
+    const [imageUrl, setImageUrl] = useState('');
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [djId, setDjId] = useState('');
     const [hostId, setHostId] = useState('');
     const [saving, setSaving] = useState(false);
@@ -300,9 +309,8 @@ function CreateEventModal({
     ), [staffList]);
 
     async function handleSave() {
-        if (!name.trim()) return;
-        setError(null);
         setSaving(true);
+        setError(null);
         try {
             const dateStr = startDate.toISOString().split('T')[0];
             const startTime = startDate.toTimeString().slice(0, 5);
@@ -310,10 +318,21 @@ function CreateEventModal({
             const selectedDj = staffList.find(s => s.uid === djId);
             const selectedHost = staffList.find(s => s.uid === hostId);
 
+            // Upload image if file selected
+            let finalImageUrl = imageUrl;
+            if (imageFile) {
+                const tempId = `evt_${Date.now()}`;
+                finalImageUrl = await uploadEventImage(imageFile, tempId);
+            }
+
+            // Auto-generate name if empty (schedule-only entry)
+            const eventName = name.trim() || `Schedule — ${dateStr} ${startTime}`;
+
             await onSave({
-                name: name.trim(),
+                name: eventName,
                 description: description.trim(),
                 genre: genre.trim() || undefined,
+                imageUrl: finalImageUrl || undefined,
                 date: dateStr,
                 startTime,
                 endTime,
@@ -323,10 +342,11 @@ function CreateEventModal({
                 hostId: hostId || undefined,
                 hostName: selectedHost?.displayName || undefined,
                 hostResponse: hostId ? 'pending' : undefined,
-                status: 'scheduled',
+                status: name.trim() ? 'scheduled' : 'draft',
             });
             // Reset form
             setName(''); setDescription(''); setGenre(''); setDjId(''); setHostId('');
+            setImageUrl(''); setImageFile(null); setImagePreview(null);
             onClose();
         } catch (err) {
             console.error('[CreateEvent] Failed to save:', err);
@@ -352,8 +372,8 @@ function CreateEventModal({
                 )}
 
                 <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Event Name *</label>
-                    <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Neon Nights" style={inputStyle} />
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Event Name <span style={{ color: 'var(--text-muted)', fontSize: 9, fontStyle: 'italic' }}>(optional for schedule-only)</span></label>
+                    <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Neon Nights (leave blank for schedule-only)" style={inputStyle} />
                 </div>
 
                 <div>
@@ -400,14 +420,60 @@ function CreateEventModal({
                     </div>
                 </div>
 
+                {/* Image upload */}
+                <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6, display: 'block' }}>Event Image</label>
+                    {imagePreview ? (
+                        <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <img src={imagePreview} alt="Preview" style={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }} />
+                            <button onClick={() => { setImageUrl(''); setImageFile(null); setImagePreview(null); }} style={{
+                                position: 'absolute', top: 6, right: 6,
+                                width: 24, height: 24, borderRadius: 6,
+                                background: 'rgba(0,0,0,0.7)', border: 'none',
+                                color: '#ff6b6b', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <Trash2 size={12} />
+                            </button>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => fileInputRef.current?.click()} style={{
+                                flex: 1, padding: 10, borderRadius: 10,
+                                background: 'rgba(255,255,255,0.04)',
+                                border: '1px dashed rgba(255,255,255,0.12)',
+                                color: 'var(--text-muted)', fontSize: 11, cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                            }}>
+                                <Upload size={12} /> Upload Image
+                            </button>
+                            <input
+                                value={imageUrl} onChange={e => { setImageUrl(e.target.value); if (e.target.value) setImagePreview(e.target.value); }}
+                                placeholder="or paste URL"
+                                style={{ flex: 1, ...inputStyle, fontSize: 11 }}
+                            />
+                        </div>
+                    )}
+                    <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }}
+                        onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (file.size > 5 * 1024 * 1024) { alert('Max 5MB'); return; }
+                            setImageFile(file);
+                            setImagePreview(URL.createObjectURL(file));
+                            setImageUrl('');
+                        }}
+                    />
+                </div>
+
                 <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
                     <button onClick={onClose} style={{ flex: 1, padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
-                    <button onClick={handleSave} disabled={!name.trim() || saving} style={{
+                    <button onClick={handleSave} disabled={saving} style={{
                         flex: 1, padding: 12, borderRadius: 10,
                         background: 'linear-gradient(135deg, rgba(0,240,255,0.2), rgba(192,132,252,0.2))',
                         border: '1px solid rgba(0,240,255,0.3)',
                         color: '#00f0ff', fontWeight: 600, cursor: 'pointer', fontSize: 13,
-                        opacity: (!name.trim() || saving) ? 0.5 : 1,
+                        opacity: saving ? 0.5 : 1,
                     }}>
                         {saving ? 'Creating...' : 'Create & Schedule'}
                     </button>
@@ -429,6 +495,7 @@ export default function SchedulePage() {
     const [loading, setLoading] = useState(true);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState<ClubEvent | null>(null);
+    const [editEvent, setEditEvent] = useState<ClubEvent | null>(null);
     const [showFullDay, setShowFullDay] = useState(false);
     const [postingRoster, setPostingRoster] = useState(false);
     const [autoAssigning, setAutoAssigning] = useState(false);
@@ -728,11 +795,28 @@ export default function SchedulePage() {
             <EventDetailModal
                 event={selectedEvent}
                 open={!!selectedEvent}
-                onClose={() => setSelectedEvent(null)}
+                onClose={() => {
+                    const ev = selectedEvent;
+                    setSelectedEvent(null);
+                    // Check if edit was requested
+                    if (ev && (ev as any).__editRequested) {
+                        delete (ev as any).__editRequested;
+                        setEditEvent(ev);
+                    }
+                }}
                 canManage={can('manager')}
                 currentUserId={appUser?.uid || ''}
                 onRespond={handleRespond}
                 onDelete={handleDelete}
+            />
+
+            {/* Edit Event Modal (reuses AddEventModal) */}
+            <AddEventModal
+                open={!!editEvent}
+                onClose={() => setEditEvent(null)}
+                onSave={() => { setEditEvent(null); fetchData(); }}
+                staffList={staffList}
+                eventToEdit={editEvent}
             />
         </div>
     );
