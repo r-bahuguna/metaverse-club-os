@@ -1,135 +1,230 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Calendar, Clock, Loader2, Save } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Loader2, Plus, Trash2, Calendar, Repeat } from 'lucide-react';
 import Modal from './Modal';
-import WheelPicker from './WheelPicker';
-import DateRangePicker from './DateRangePicker';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
-import { addDoc, collection, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc } from 'firebase/firestore';
+import { Availability } from '@/lib/types';
 
 interface SetAvailabilityModalProps {
     open: boolean;
     onClose: () => void;
-    onSave?: () => void;
 }
 
-export default function SetAvailabilityModal({ open, onClose, onSave }: SetAvailabilityModalProps) {
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export default function SetAvailabilityModal({ open, onClose }: SetAvailabilityModalProps) {
     const { appUser } = useAuth();
-    const [mode, setMode] = useState<'single' | 'range' | 'recurring'>('single');
-    const [startDate, setStartDate] = useState(new Date());
-    const [endDate, setEndDate] = useState(new Date(new Date().setHours(new Date().getHours() + 4)));
-    const [recurringDays, setRecurringDays] = useState<number[]>([]);
+    const [existing, setExisting] = useState<Availability[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // New entry form
+    const [type, setType] = useState<'single' | 'recurring'>('recurring');
+    const [date, setDate] = useState('');
+    const [startTime, setStartTime] = useState('20:00');
+    const [endTime, setEndTime] = useState('02:00');
+    const [recurringDays, setRecurringDays] = useState<number[]>([5, 6]); // Fri, Sat default
+    const [genres, setGenres] = useState('');
     const [saving, setSaving] = useState(false);
 
-    if (!open) return null;
+    // Fetch existing availability
+    useEffect(() => {
+        if (!open || !appUser?.uid) return;
+        setLoading(true);
+        const fetchAvail = async () => {
+            try {
+                const q = query(collection(db, 'availability'), where('staffId', '==', appUser.uid));
+                const snap = await getDocs(q);
+                setExisting(snap.docs.map(d => ({ id: d.id, ...d.data() } as Availability)));
+            } catch (err) {
+                console.warn('[Availability] Fetch error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchAvail();
+    }, [open, appUser?.uid]);
 
-    const handleSave = async () => {
+    async function handleAdd() {
         if (!appUser) return;
         setSaving(true);
         try {
-            await addDoc(collection(db, 'availability'), {
+            const avail: Omit<Availability, 'id'> = {
                 staffId: appUser.uid,
                 staffName: appUser.displayName,
                 role: appUser.role,
-                type: mode, // 'single', 'range', 'recurring'
-                startDate: startDate.toISOString().split('T')[0],
-                endDate: mode === 'range' ? endDate.toISOString().split('T')[0] : startDate.toISOString().split('T')[0],
-                startTime: startDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                endTime: endDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                recurringDays: mode === 'recurring' ? recurringDays : [],
-                createdAt: new Date().toISOString()
-            });
-            onSave?.();
-            onClose();
-        } catch (e) {
-            console.error('Failed to save availability', e);
+                type,
+                date: type === 'single' ? date : '',
+                startTime,
+                endTime,
+                ...(type === 'recurring' ? { recurringDays } : {}),
+                ...(genres.trim() ? { preferredGenres: genres.split(',').map(g => g.trim()).filter(Boolean) } : {}),
+                createdAt: new Date().toISOString(),
+            };
+            const docRef = await addDoc(collection(db, 'availability'), avail);
+            setExisting(prev => [...prev, { id: docRef.id, ...avail } as Availability]);
+            setDate(''); setGenres('');
+        } catch (err) {
+            console.error('[Availability] Save error:', err);
         } finally {
             setSaving(false);
         }
-    };
+    }
 
-    const toggleDay = (day: number) => {
+    async function handleDelete(id: string) {
+        try {
+            await deleteDoc(doc(db, 'availability', id));
+            setExisting(prev => prev.filter(a => a.id !== id));
+        } catch (err) {
+            console.error('[Availability] Delete error:', err);
+        }
+    }
+
+    function toggleDay(day: number) {
         setRecurringDays(prev =>
-            prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+            prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()
         );
-    };
+    }
+
+    if (!open) return null;
 
     return (
-        <Modal open={open} onClose={onClose} title="Set Availability" maxWidth={440}>
+        <Modal open={open} onClose={onClose} title="My Availability">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {/* Mode Selector */}
-                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', padding: 4, borderRadius: 10 }}>
-                    {(['single', 'range', 'recurring'] as const).map(m => (
-                        <button
-                            key={m}
-                            onClick={() => setMode(m)}
-                            style={{
-                                flex: 1, padding: '8px 0', border: 'none', borderRadius: 8,
-                                background: mode === m ? 'rgba(255,255,255,0.1)' : 'transparent',
-                                color: mode === m ? 'var(--neon-cyan)' : 'var(--text-muted)',
-                                fontSize: 13, fontWeight: 500, cursor: 'pointer', textTransform: 'capitalize'
-                            }}
-                        >
-                            {m}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Date/Time Pickers */}
-                {mode === 'recurring' ? (
-                    <div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>Days of Week</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => toggleDay(i)}
-                                    style={{
-                                        width: 36, height: 36, borderRadius: 18, border: '1px solid var(--glass-border)',
-                                        background: recurringDays.includes(i) ? 'var(--neon-cyan)' : 'rgba(255,255,255,0.05)',
-                                        color: recurringDays.includes(i) ? 'black' : 'var(--text-secondary)',
-                                        fontWeight: 600, cursor: 'pointer'
-                                    }}
-                                >
-                                    {d}
-                                </button>
+                {/* Existing entries */}
+                <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, display: 'block' }}>
+                        Current Availability ({existing.length})
+                    </label>
+                    {loading ? (
+                        <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Loading...</div>
+                    ) : existing.length === 0 ? (
+                        <div style={{
+                            padding: 16, textAlign: 'center', borderRadius: 8,
+                            background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)',
+                            color: 'var(--text-muted)', fontSize: 12,
+                        }}>
+                            No availability set yet. Add your available times below.
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {existing.map(a => (
+                                <div key={a.id} style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                    padding: '8px 12px', borderRadius: 8,
+                                    background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)',
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                                        {a.type === 'recurring' ? <Repeat size={13} style={{ color: 'var(--neon-cyan)' }} /> : <Calendar size={13} style={{ color: 'var(--neon-purple)' }} />}
+                                        <span style={{ color: 'var(--text-primary)' }}>
+                                            {a.type === 'recurring' ? a.recurringDays?.map(d => DAY_LABELS[d]).join(', ') : a.date}
+                                        </span>
+                                        <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{a.startTime}–{a.endTime}</span>
+                                        {a.preferredGenres && a.preferredGenres.length > 0 && (
+                                            <span style={{ fontSize: 10, color: 'var(--neon-pink)' }}>{a.preferredGenres.join(', ')}</span>
+                                        )}
+                                    </div>
+                                    <button onClick={() => handleDelete(a.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4 }}>
+                                        <Trash2 size={13} />
+                                    </button>
+                                </div>
                             ))}
                         </div>
-                        <div style={{ marginTop: 16 }}>
-                            <DateRangePicker
-                                startDate={startDate}
-                                endDate={endDate}
-                                onChange={(s, e) => { setStartDate(s); setEndDate(e); }}
-                                isRange={true}
-                            />
+                    )}
+                </div>
+
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
+                {/* Add new */}
+                <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, display: 'block' }}>
+                        Add Availability
+                    </label>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                        {(['recurring', 'single'] as const).map(t => (
+                            <button key={t} type="button" onClick={() => setType(t)} style={{
+                                padding: '7px 16px', borderRadius: 20, fontSize: 12, fontWeight: 500,
+                                border: `1px solid ${type === t ? 'var(--neon-cyan)' : 'var(--glass-border)'}`,
+                                background: type === t ? 'rgba(0,240,255,0.1)' : 'transparent',
+                                color: type === t ? 'var(--neon-cyan)' : 'var(--text-muted)',
+                                cursor: 'pointer',
+                            }}>
+                                {t === 'recurring' ? '🔁 Weekly' : '📅 Specific Date'}
+                            </button>
+                        ))}
+                    </div>
+
+                    {type === 'recurring' && (
+                        <div style={{ marginBottom: 12 }}>
+                            <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>Days</label>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                                {DAY_LABELS.map((label, i) => (
+                                    <button key={i} type="button" onClick={() => toggleDay(i)} style={{
+                                        width: 36, height: 36, borderRadius: 8, fontSize: 11, fontWeight: 600,
+                                        border: `1px solid ${recurringDays.includes(i) ? 'var(--neon-cyan)' : 'var(--glass-border)'}`,
+                                        background: recurringDays.includes(i) ? 'rgba(0,240,255,0.12)' : 'rgba(255,255,255,0.03)',
+                                        color: recurringDays.includes(i) ? 'var(--neon-cyan)' : 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                    }}>
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {type === 'single' && (
+                        <div style={{ marginBottom: 12 }}>
+                            <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Date</label>
+                            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{
+                                width: '100%', padding: '8px 10px', borderRadius: 8,
+                                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+                            }} />
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Start Time</label>
+                            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} style={{
+                                width: '100%', padding: '8px 10px', borderRadius: 8,
+                                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+                            }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>End Time</label>
+                            <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} style={{
+                                width: '100%', padding: '8px 10px', borderRadius: 8,
+                                background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
+                                color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+                            }} />
                         </div>
                     </div>
-                ) : (
-                    <DateRangePicker
-                        startDate={startDate}
-                        endDate={endDate}
-                        onChange={(s, e) => { setStartDate(s); setEndDate(e); }}
-                        isRange={mode === 'range'}
-                    />
-                )}
 
-                {/* Save Button */}
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    style={{
+                    <div style={{ marginBottom: 12 }}>
+                        <label style={{ fontSize: 10, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Preferred Genres (optional, comma-separated)</label>
+                        <input type="text" value={genres} onChange={e => setGenres(e.target.value)} placeholder="e.g. House, Techno, Trance" style={{
+                            width: '100%', padding: '8px 10px', borderRadius: 8,
+                            background: 'rgba(255,255,255,0.04)', border: '1px solid var(--glass-border)',
+                            color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+                        }} />
+                    </div>
+
+                    <button onClick={handleAdd} disabled={saving || (type === 'single' && !date) || (type === 'recurring' && recurringDays.length === 0)} style={{
                         width: '100%', padding: 12, borderRadius: 10,
-                        background: 'var(--neon-cyan)', border: 'none',
-                        color: 'black', fontWeight: 600, cursor: 'pointer',
-                        marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                        opacity: saving ? 0.7 : 1
-                    }}
-                >
-                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                    Save Availability
-                </button>
+                        background: 'rgba(0, 240, 255, 0.1)', border: '1px solid rgba(0, 240, 255, 0.3)',
+                        color: 'var(--neon-cyan)', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        opacity: saving ? 0.6 : 1,
+                    }}>
+                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                        {saving ? 'Saving...' : 'Add Availability'}
+                    </button>
+                </div>
             </div>
         </Modal>
     );

@@ -11,7 +11,9 @@ import DateRangePicker from '@/components/ui/DateRangePicker';
 import { ClubEvent, AppUser } from '@/lib/types';
 import { ROLE_CONFIG } from '@/lib/constants';
 import { uploadEventImage } from '@/lib/storage';
+import { logAction } from '@/lib/audit';
 import AddEventModal from '@/components/ui/AddEventModal';
+import SetAvailabilityModal from '@/components/ui/SetAvailabilityModal';
 
 /* ── Helpers ── */
 function getStartOfWeek(date: Date) {
@@ -331,17 +333,14 @@ function CreateEventModal({
             await onSave({
                 name: eventName,
                 description: description.trim(),
-                genre: genre.trim() || undefined,
-                imageUrl: finalImageUrl || undefined,
+                type: name.trim() ? 'event' : 'schedule',
+                ...(genre.trim() ? { genre: genre.trim() } : {}),
+                ...(finalImageUrl ? { imageUrl: finalImageUrl } : {}),
                 date: dateStr,
                 startTime,
                 endTime,
-                djId: djId || undefined,
-                djName: selectedDj?.displayName || undefined,
-                djResponse: djId ? 'pending' : undefined,
-                hostId: hostId || undefined,
-                hostName: selectedHost?.displayName || undefined,
-                hostResponse: hostId ? 'pending' : undefined,
+                ...(djId ? { djId, djName: selectedDj?.displayName || '', djResponse: 'pending' } : {}),
+                ...(hostId ? { hostId, hostName: selectedHost?.displayName || '', hostResponse: 'pending' } : {}),
                 status: name.trim() ? 'scheduled' : 'draft',
             });
             // Reset form
@@ -499,6 +498,7 @@ export default function SchedulePage() {
     const [showFullDay, setShowFullDay] = useState(false);
     const [postingRoster, setPostingRoster] = useState(false);
     const [autoAssigning, setAutoAssigning] = useState(false);
+    const [isAvailabilityOpen, setIsAvailabilityOpen] = useState(false);
     const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const visibleHours = useMemo(() => getVisibleHours(showFullDay), [showFullDay]);
@@ -625,6 +625,15 @@ export default function SchedulePage() {
                                 opacity: postingRoster ? 0.5 : 1,
                             }}>
                                 <Send size={12} /> {postingRoster ? 'Posting...' : 'Post Roster'}
+                            </button>
+
+                            <button onClick={() => setIsAvailabilityOpen(true)} style={{
+                                display: 'flex', alignItems: 'center', gap: 5,
+                                padding: '6px 12px', borderRadius: 8,
+                                background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.15)',
+                                color: 'var(--neon-cyan)', fontWeight: 500, fontSize: 11, cursor: 'pointer',
+                            }}>
+                                <Calendar size={12} /> Set Availability
                             </button>
 
                             <button onClick={async () => {
@@ -818,6 +827,9 @@ export default function SchedulePage() {
                 staffList={staffList}
                 eventToEdit={editEvent}
             />
+
+            {/* Availability Modal */}
+            <SetAvailabilityModal open={isAvailabilityOpen} onClose={() => setIsAvailabilityOpen(false)} />
         </div>
     );
 }

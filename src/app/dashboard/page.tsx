@@ -146,10 +146,10 @@ function UpcomingEventsSection() {
     return (
         <>
             <div className={styles.sectionHeader}>
-                <h2 className={styles.sectionTitle}>Upcoming Events</h2>
+                <h2 className={styles.sectionTitle}>Upcoming</h2>
                 <span className={styles.sectionBadge}>{events.length}</span>
             </div>
-            <div className={styles.eventList}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {loading ? (
                     <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Loading...</div>
                 ) : events.length === 0 ? (
@@ -157,16 +157,77 @@ function UpcomingEventsSection() {
                 ) : (
                     events.map(event => {
                         const { day, month } = formatDate(event.date);
+                        const isEvent = event.type === 'event' || (event.type !== 'schedule' && event.status !== 'draft');
+                        const hasImage = !!event.imageUrl;
                         return (
-                            <div key={event.id} className={styles.eventCard}>
-                                <div className={styles.eventDate}>
-                                    <span className={styles.eventDay}>{day}</span>
-                                    <span className={styles.eventMonth}>{month}</span>
-                                </div>
-                                <div className={styles.eventInfo}>
-                                    <div className={styles.eventName}>{event.name}</div>
-                                    <div className={styles.eventTime}>{event.startTime}–{event.endTime}</div>
-                                    {event.genre && <div className={styles.eventGenre}>{event.genre}</div>}
+                            <div key={event.id} style={{
+                                display: 'flex', gap: 12, padding: hasImage ? 0 : '10px 12px',
+                                borderRadius: 12, overflow: 'hidden',
+                                background: hasImage ? 'transparent' : 'rgba(255,255,255,0.02)',
+                                border: `1px solid ${isEvent && hasImage ? 'rgba(192,132,252,0.25)' : 'rgba(255,255,255,0.04)'}`,
+                                position: 'relative',
+                                ...(isEvent && hasImage ? {
+                                    boxShadow: '0 0 15px rgba(192,132,252,0.1), 0 0 30px rgba(0,240,255,0.05)',
+                                } : {}),
+                                transition: 'border-color 0.3s ease',
+                            }}>
+                                {/* Image background for events with images */}
+                                {hasImage && (
+                                    <div style={{
+                                        position: 'absolute', inset: 0, zIndex: 0,
+                                        background: `url(${event.imageUrl}) center/cover`,
+                                    }}>
+                                        <div style={{
+                                            position: 'absolute', inset: 0,
+                                            background: 'linear-gradient(90deg, rgba(10,10,20,0.92) 55%, rgba(10,10,20,0.6) 100%)',
+                                        }} />
+                                    </div>
+                                )}
+
+                                {/* Content */}
+                                <div style={{
+                                    display: 'flex', gap: 12, padding: hasImage ? '10px 12px' : 0,
+                                    position: 'relative', zIndex: 1, flex: 1, minWidth: 0,
+                                }}>
+                                    {/* Date badge */}
+                                    <div style={{
+                                        minWidth: 38, textAlign: 'center', flexShrink: 0,
+                                        padding: '4px 0',
+                                    }}>
+                                        <div style={{ fontSize: 18, fontWeight: 700, color: isEvent ? 'var(--neon-purple)' : 'var(--text-secondary)', lineHeight: 1 }}>{day}</div>
+                                        <div style={{ fontSize: 9, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', letterSpacing: '0.08em' }}>{month}</div>
+                                    </div>
+
+                                    {/* Info */}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{
+                                            fontSize: 13, fontWeight: 600,
+                                            color: isEvent ? 'var(--text-primary)' : 'var(--text-secondary)',
+                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                        }}>
+                                            {event.name}
+                                        </div>
+                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                            {event.startTime}–{event.endTime}
+                                            {event.genre && <span style={{ marginLeft: 6, color: 'var(--neon-pink)', fontSize: 10 }}>· {event.genre}</span>}
+                                        </div>
+                                        {event.description && (
+                                            <div style={{
+                                                fontSize: 11, color: 'rgba(255,255,255,0.35)',
+                                                marginTop: 2, overflow: 'hidden',
+                                                display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
+                                            }}>
+                                                {event.description}
+                                            </div>
+                                        )}
+                                        {/* DJ / Host */}
+                                        {(event.djName || event.hostName) && (
+                                            <div style={{ display: 'flex', gap: 10, marginTop: 3, fontSize: 10, color: 'var(--text-muted)' }}>
+                                                {event.djName && <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>🎧 {event.djName}</span>}
+                                                {event.hostName && <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>🎤 {event.hostName}</span>}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         );

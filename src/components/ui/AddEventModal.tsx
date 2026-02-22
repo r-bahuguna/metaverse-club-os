@@ -7,6 +7,7 @@ import DateRangePicker from './DateRangePicker';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
 import { uploadEventImage } from '@/lib/storage';
+import { logAction } from '@/lib/audit';
 import { addDoc, collection, updateDoc, doc } from 'firebase/firestore';
 import { AppUser } from '@/lib/types';
 import { ROLE_CONFIG } from '@/lib/constants';
@@ -39,9 +40,15 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
 
-    // Filter staff
-    const djs = useMemo(() => staffList.filter(u => ['dj', 'manager', 'owner', 'super_admin'].includes(u.role)), [staffList]);
-    const hosts = useMemo(() => staffList.filter(u => ['host', 'manager', 'owner', 'super_admin'].includes(u.role)), [staffList]);
+    // Filter staff — check both primary and secondary roles
+    const djs = useMemo(() => staffList.filter(u =>
+        u.role === 'dj' || u.secondaryRoles?.includes('dj') ||
+        ['manager', 'general_manager', 'owner', 'super_admin'].includes(u.role)
+    ), [staffList]);
+    const hosts = useMemo(() => staffList.filter(u =>
+        u.role === 'host' || u.secondaryRoles?.includes('host') ||
+        ['manager', 'general_manager', 'owner', 'super_admin'].includes(u.role)
+    ), [staffList]);
 
     // Pre-fill for Edit Mode
     useEffect(() => {
@@ -95,30 +102,30 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
                 finalImageUrl = await uploadEventImage(imageFile, tempId);
             }
 
-            const eventData = {
+            const eventData: Record<string, unknown> = {
                 name,
-                description,
-                genre,
-                imageUrl: finalImageUrl,
+                description: description || '',
+                type: 'event',
                 date: startDate.toISOString().split('T')[0],
                 startTime: startDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
                 endTime: endDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                djId,
-                djName: staffList.find(s => s.uid === djId)?.displayName || '',
-                hostId,
-                hostName: staffList.find(s => s.uid === hostId)?.displayName || '',
                 isRecurring: recurring,
                 status: eventToEdit?.status || 'scheduled',
-                djResponse: djId ? 'pending' : undefined,
-                hostResponse: hostId ? 'pending' : undefined,
                 updatedAt: new Date().toISOString(),
-                ...(eventToEdit ? {} : { createdBy: appUser.uid, createdAt: new Date().toISOString() })
+                ...(eventToEdit ? {} : { createdBy: appUser.uid, createdAt: new Date().toISOString() }),
+                // Only include non-empty optional fields (Firestore rejects undefined)
+                ...(genre ? { genre } : {}),
+                ...(finalImageUrl ? { imageUrl: finalImageUrl } : {}),
+                ...(djId ? { djId, djName: staffList.find(s => s.uid === djId)?.displayName || '', djResponse: 'pending' } : { djId: '', djName: '', djResponse: '' }),
+                ...(hostId ? { hostId, hostName: staffList.find(s => s.uid === hostId)?.displayName || '', hostResponse: 'pending' } : { hostId: '', hostName: '', hostResponse: '' }),
             };
 
             if (eventToEdit) {
                 await updateDoc(doc(db, 'events', eventToEdit.id), eventData);
+                logAction({ action: 'event_updated', actorId: appUser.uid, actorName: appUser.displayName, targetId: eventToEdit.id, targetName: String(name), details: `Updated event "${name}"` });
             } else {
-                await addDoc(collection(db, 'events'), eventData);
+                const docRef = await addDoc(collection(db, 'events'), eventData);
+                logAction({ action: 'event_created', actorId: appUser.uid, actorName: appUser.displayName, targetId: docRef.id, targetName: String(name), details: `Created event "${name}" on ${eventData.date}` });
             }
 
             // Create Shifts if requested (and not editing)

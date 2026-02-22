@@ -5,6 +5,7 @@ import { Menu } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
 import { MOCK_DASHBOARD_STATS } from '@/lib/mock-data';
 import { UserRole } from '@/lib/types';
+import NotificationBell from '@/components/ui/NotificationBell';
 import styles from './TopBar.module.css';
 
 interface TopBarProps {
@@ -51,6 +52,8 @@ export default function TopBar({ title, onMenuClick }: TopBarProps) {
                 )}
 
                 {/* Role badge for non-super-admin users */}
+                {!isGuest && <NotificationBell />}
+
                 {!isSuperAdmin && !isGuest && (
                     <div className={styles.roleBadge}>
                         {roleLabel}

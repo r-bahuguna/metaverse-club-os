@@ -256,7 +256,7 @@ export default function StaffPage() {
             );
         }
 
-        // Category filter
+        // Category filter — check both primary and secondary roles
         if (activeFilter === 'online') {
             result = result.filter(m => {
                 const p = presenceMap.get(m.uid);
@@ -264,8 +264,14 @@ export default function StaffPage() {
             });
         } else if (activeFilter !== 'all') {
             const roles = CATEGORY_ROLES[activeFilter];
-            result = result.filter(m => roles.includes(m.role));
+            result = result.filter(m =>
+                roles.includes(m.role) ||
+                (m.secondaryRoles?.some(sr => roles.includes(sr)) ?? false)
+            );
         }
+
+        // Filter out deactivated users
+        result = result.filter(m => m.status !== 'deactivated');
 
         // Sort: web-online first, then discord-online, then by role hierarchy
         result = [...result].sort((a, b) => {
@@ -286,8 +292,8 @@ export default function StaffPage() {
         if (activeFilter !== 'all' && activeFilter !== 'online') return null;
 
         const management = filteredStaff.filter(m => ['super_admin', 'owner', 'general_manager', 'manager'].includes(m.role));
-        const djs = filteredStaff.filter(m => m.role === 'dj');
-        const hosts = filteredStaff.filter(m => m.role === 'host');
+        const djs = filteredStaff.filter(m => m.role === 'dj' || (m.secondaryRoles?.includes('dj') && !['super_admin', 'owner', 'general_manager', 'manager'].includes(m.role)));
+        const hosts = filteredStaff.filter(m => m.role === 'host' || (m.secondaryRoles?.includes('host') && !['super_admin', 'owner', 'general_manager', 'manager'].includes(m.role) && m.role !== 'dj'));
         const others = filteredStaff.filter(m => ['vip_member', 'member'].includes(m.role));
 
         return [

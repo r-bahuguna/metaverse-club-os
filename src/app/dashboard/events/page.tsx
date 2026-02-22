@@ -44,7 +44,9 @@ export default function EventsPage() {
         setLoading(true);
         try {
             const eventsSnap = await getDocs(query(collection(db, 'events'), orderBy('date', 'desc')));
-            setEvents(eventsSnap.docs.map(d => ({ id: d.id, ...d.data() } as ClubEvent)));
+            const allEvents = eventsSnap.docs.map(d => ({ id: d.id, ...d.data() } as ClubEvent));
+            // Filter: only show named events (not schedule-only entries)
+            setEvents(allEvents.filter(e => e.type === 'event' || (e.type !== 'schedule' && e.status !== 'draft')));
 
             if (can('manager')) {
                 const usersSnap = await getDocs(query(collection(db, 'users')));

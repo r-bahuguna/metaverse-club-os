@@ -27,6 +27,8 @@ export interface AppUser {
   createdBy?: string;
   onlineStatus?: OnlineStatus;
   mustChangePassword?: boolean;
+  status?: 'active' | 'deactivated';
+  deactivatedAt?: string;
 }
 
 /** Staff online status */
@@ -88,6 +90,7 @@ export interface ClubEvent {
   name: string;
   description?: string;
   genre?: string;
+  type?: 'event' | 'schedule';  // Discriminator: event (named) vs schedule-only
   date: string;                  // YYYY-MM-DD
   startTime: string;             // "22:00"
   endTime: string;               // "02:00"
