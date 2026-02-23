@@ -82,16 +82,49 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true, action: 'reactivated' });
         }
 
-        /* ─── ROLE CHANGE VALIDATION ─── */
-        if (role !== undefined && role !== targetCurrentRole) {
-            if (targetCurrentRole === 'owner' && callerRole !== 'super_admin') {
-                return NextResponse.json({ error: 'Only super admin can modify the owner role' }, { status: 403 });
+        /* ─── OWNERSHIP TRANSFER FLOW ─── */
+        if (action === 'transfer_ownership') {
+            const { newOwnerUid, confirmation } = body;
+            if (confirmation !== 'TRANSFER OWNERSHIP') {
+                return NextResponse.json({ error: 'Ownership transfer requires typing "TRANSFER OWNERSHIP" as confirmation' }, { status: 400 });
             }
-            if (role === 'owner' && !['owner', 'super_admin'].includes(callerRole)) {
+            if (callerRole !== 'super_admin' && callerRole !== 'owner') {
                 return NextResponse.json({ error: 'Only owner or super admin can transfer ownership' }, { status: 403 });
             }
-            if ((targetCurrentRole === 'super_admin' || role === 'super_admin') && callerRole !== 'super_admin') {
-                return NextResponse.json({ error: 'Only super admin can modify super admin roles' }, { status: 403 });
+            if (callerRole === 'owner' && decoded.uid !== uid) {
+                return NextResponse.json({ error: 'Owner can only transfer their own ownership' }, { status: 403 });
+            }
+            if (!newOwnerUid) {
+                return NextResponse.json({ error: 'Missing newOwnerUid' }, { status: 400 });
+            }
+            // Demote current owner
+            await adminDb.collection('users').doc(uid).update({ role: 'general_manager', updatedAt: new Date().toISOString() });
+            await adminAuth.setCustomUserClaims(uid, { role: 'general_manager' });
+            // Promote new owner
+            await adminDb.collection('users').doc(newOwnerUid).update({ role: 'owner', updatedAt: new Date().toISOString() });
+            await adminAuth.setCustomUserClaims(newOwnerUid, { role: 'owner' });
+            return NextResponse.json({ success: true, action: 'ownership_transferred' });
+        }
+
+        /* ─── ROLE CHANGE VALIDATION ─── */
+        // CRITICAL: If target is owner or super_admin, NEVER allow role changes
+        // through the normal edit flow. Strip role from request.
+        if (PROTECTED_ROLES.includes(targetCurrentRole)) {
+            // Owner/super_admin primary role is immutable via normal update
+            // Only secondaryRoles and profile fields can be changed
+            if (role !== undefined && role !== targetCurrentRole) {
+                return NextResponse.json({
+                    error: `Cannot change ${targetCurrentRole} role. Use the dedicated ownership transfer process.`
+                }, { status: 403 });
+            }
+        }
+
+        if (role !== undefined && role !== targetCurrentRole) {
+            if (role === 'owner') {
+                return NextResponse.json({ error: 'Use the ownership transfer process to assign owner role' }, { status: 403 });
+            }
+            if (role === 'super_admin' && callerRole !== 'super_admin') {
+                return NextResponse.json({ error: 'Only super admin can assign super admin role' }, { status: 403 });
             }
             const hierarchy = ['member', 'vip_member', 'host', 'dj', 'manager', 'general_manager', 'owner', 'super_admin'];
             const callerLevel = hierarchy.indexOf(callerRole);

@@ -30,8 +30,10 @@ export default function EditStaffModal({ open, onClose, onUpdated, staff }: Edit
 
     // Is target a protected role?
     const targetIsProtected = staff?.role === 'owner' || staff?.role === 'super_admin';
-    // Can caller edit roles?
-    const canEditRoles = isSuperAdmin || (!targetIsProtected);
+    // Primary role is LOCKED for owner/super_admin — no one can casually change it
+    const canEditPrimaryRole = !targetIsProtected;
+    // Secondary roles can always be edited by managers+
+    const canEditSecondaryRoles = true;
     // Is this a deactivated user?
     const isDeactivated = staff?.status === 'deactivated';
 
@@ -75,9 +77,13 @@ export default function EditStaffModal({ open, onClose, onUpdated, staff }: Edit
                 slUuid,
                 discordUsername,
             };
-            // Only send role changes if allowed
-            if (canEditRoles) {
+            // CRITICAL: Never send primary role for owner/super_admin
+            // This prevents accidental role override
+            if (canEditPrimaryRole) {
                 payload.role = role;
+            }
+            // Always send secondary roles (owner can be DJ+Host via secondary)
+            if (canEditSecondaryRoles) {
                 payload.secondaryRoles = secondaryRoles;
             }
 
@@ -205,25 +211,42 @@ export default function EditStaffModal({ open, onClose, onUpdated, staff }: Edit
 
                     <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
 
-                    {/* Role Protection Banner */}
-                    {targetIsProtected && !isSuperAdmin && (
+                    {/* Role Protection Banner — ALWAYS shown for owner/super_admin */}
+                    {targetIsProtected && (
                         <div style={{
-                            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
-                            borderRadius: 8, background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+                            borderRadius: 10, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
                         }}>
-                            <Shield size={14} color="#fbbf24" />
-                            <span style={{ fontSize: 12, color: '#fbbf24' }}>
-                                {staff.role === 'owner' ? 'Owner' : 'Super Admin'} role — only Super Admin can change
-                            </span>
+                            <Shield size={16} color="#ef4444" />
+                            <div>
+                                <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>
+                                    ⚠️ {staff.role === 'owner' ? 'Owner' : 'Super Admin'} — Primary role locked
+                                </div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                    Ownership cannot be changed from this panel. Use the dedicated ownership transfer process.
+                                </div>
+                            </div>
                         </div>
                     )}
 
-                    {/* Primary Role — only show if allowed */}
-                    {canEditRoles && (
-                        <div>
-                            <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                                Primary Role
-                            </label>
+                    {/* Primary Role — shown as READ-ONLY badge for owner/super_admin */}
+                    <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                            Primary Role
+                        </label>
+                        {targetIsProtected ? (
+                            <div style={{
+                                marginTop: 8, padding: '10px 16px', borderRadius: 10,
+                                background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)',
+                                display: 'flex', alignItems: 'center', gap: 8,
+                            }}>
+                                <Shield size={14} color="#fbbf24" />
+                                <span style={{ fontSize: 14, fontWeight: 700, color: '#fbbf24' }}>
+                                    {ROLE_CONFIG[staff.role]?.label || staff.role}
+                                </span>
+                                <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto', fontStyle: 'italic' }}>locked</span>
+                            </div>
+                        ) : (
                             <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                                 {availableRoles.map(r => {
                                     const config = ROLE_CONFIG[r];
@@ -245,48 +268,46 @@ export default function EditStaffModal({ open, onClose, onUpdated, staff }: Edit
                                     );
                                 })}
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
-                    {/* Secondary Roles — only show if allowed */}
-                    {canEditRoles && (
-                        <div>
-                            <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                                Secondary Roles
-                            </label>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-                                {availableRoles.map(r => {
-                                    if (r === role) return null;
-                                    const config = ROLE_CONFIG[r];
-                                    const isSelected = secondaryRoles.includes(r);
-                                    return (
-                                        <button key={r} type="button"
-                                            onClick={() => toggleSecondary(r)}
-                                            style={{
-                                                padding: '8px 12px', borderRadius: 8,
-                                                border: `1px solid ${isSelected ? 'var(--glass-border)' : 'transparent'}`,
-                                                background: isSelected ? 'rgba(255,255,255,0.08)' : 'transparent',
-                                                color: isSelected ? 'var(--text-primary)' : 'var(--text-muted)',
-                                                fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                                                textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8,
-                                            }}
-                                        >
-                                            <div style={{
-                                                width: 16, height: 16, borderRadius: 4,
-                                                border: '1px solid var(--text-muted)',
-                                                background: isSelected ? 'var(--neon-cyan)' : 'transparent',
-                                                borderColor: isSelected ? 'var(--neon-cyan)' : 'var(--text-muted)',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            }}>
-                                                {isSelected && <Check size={12} color="black" strokeWidth={3} />}
-                                            </div>
-                                            {config.label}
-                                        </button>
-                                    );
-                                })}
-                            </div>
+                    {/* Secondary Roles — ALWAYS editable (owner can also be DJ/Host) */}
+                    <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                            Secondary Roles
+                        </label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+                            {availableRoles.map(r => {
+                                if (r === role) return null;
+                                const config = ROLE_CONFIG[r];
+                                const isSelected = secondaryRoles.includes(r);
+                                return (
+                                    <button key={r} type="button"
+                                        onClick={() => toggleSecondary(r)}
+                                        style={{
+                                            padding: '8px 12px', borderRadius: 8,
+                                            border: `1px solid ${isSelected ? 'var(--glass-border)' : 'transparent'}`,
+                                            background: isSelected ? 'rgba(255,255,255,0.08)' : 'transparent',
+                                            color: isSelected ? 'var(--text-primary)' : 'var(--text-muted)',
+                                            fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                                            textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8,
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: 16, height: 16, borderRadius: 4,
+                                            border: '1px solid var(--text-muted)',
+                                            background: isSelected ? 'var(--neon-cyan)' : 'transparent',
+                                            borderColor: isSelected ? 'var(--neon-cyan)' : 'var(--text-muted)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            {isSelected && <Check size={12} color="black" strokeWidth={3} />}
+                                        </div>
+                                        {config.label}
+                                    </button>
+                                );
+                            })}
                         </div>
-                    )}
+                    </div>
 
                     {errMsg && (
                         <div style={{
