@@ -9,21 +9,24 @@ import { NextRequest, NextResponse } from 'next/server';
 const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1475598533771006092/Q01B9tYI9owUCiTVrg4LDYlCy8DAPtBZIv7ViVgpzcn_6R-rJqmZvE70G3CDuFrSRzzc';
 
 interface ApplicationData {
-    displayName: string;
-    slName: string;
-    discordUsername: string;
+    slDisplayName: string;
+    agentName: string;
+    slUuid: string;
+    usesVoice: boolean;
+    discordUsername?: string;
     role: 'dj' | 'host' | 'both';
-    experience: string;
-    genres: string;
-    availability: string;
-    timezone: string;
-    aboutYou: string;
+    experience?: string;
+    genres?: string;
+    availability?: string;
+    timezone?: string;
+    aboutYou?: string;
     sampleLink?: string;
 }
 
 function buildDiscordMessage(data: ApplicationData): object {
     const roleEmoji = data.role === 'dj' ? '🎧' : data.role === 'host' ? '🎤' : '🎧🎤';
     const roleLabel = data.role === 'dj' ? 'DJ' : data.role === 'host' ? 'Host' : 'DJ + Host';
+    const voiceEmoji = data.usesVoice ? '🔊 Yes' : '🔇 No';
     const now = new Date();
     const timestamp = now.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
 
@@ -36,18 +39,13 @@ function buildDiscordMessage(data: ApplicationData): object {
             },
             fields: [
                 {
-                    name: '👤 Display Name',
-                    value: `\`${data.displayName}\``,
+                    name: '👤 SL Display Name',
+                    value: `\`${data.slDisplayName}\``,
                     inline: true,
                 },
                 {
-                    name: '🎮 SL Name',
-                    value: `\`${data.slName}\``,
-                    inline: true,
-                },
-                {
-                    name: '💬 Discord',
-                    value: `\`${data.discordUsername}\``,
+                    name: '🎮 Agent Name',
+                    value: `\`${data.agentName}\``,
                     inline: true,
                 },
                 {
@@ -56,30 +54,45 @@ function buildDiscordMessage(data: ApplicationData): object {
                     inline: true,
                 },
                 {
+                    name: '🆔 SL UUID',
+                    value: `\`${data.slUuid}\``,
+                    inline: false,
+                },
+                {
+                    name: '🎙️ Uses Voice',
+                    value: voiceEmoji,
+                    inline: true,
+                },
+                ...(data.discordUsername ? [{
+                    name: '💬 Discord',
+                    value: `\`${data.discordUsername}\``,
+                    inline: true,
+                }] : []),
+                ...(data.timezone ? [{
                     name: '🌍 Timezone',
-                    value: data.timezone || 'Not specified',
+                    value: data.timezone,
                     inline: true,
-                },
-                {
+                }] : []),
+                ...(data.availability ? [{
                     name: '📅 Availability',
-                    value: data.availability || 'Not specified',
+                    value: data.availability,
                     inline: true,
-                },
-                {
+                }] : []),
+                ...(data.experience ? [{
                     name: '🎵 Experience',
-                    value: data.experience || 'No experience listed',
+                    value: data.experience,
                     inline: false,
-                },
-                {
+                }] : []),
+                ...(data.genres ? [{
                     name: '🎶 Genres / Specialties',
-                    value: data.genres || 'Not specified',
+                    value: data.genres,
                     inline: false,
-                },
-                {
+                }] : []),
+                ...(data.aboutYou ? [{
                     name: '✨ About',
-                    value: data.aboutYou || 'Nothing provided',
+                    value: data.aboutYou,
                     inline: false,
-                },
+                }] : []),
                 ...(data.sampleLink ? [{
                     name: '🔗 Sample / Portfolio',
                     value: data.sampleLink,
@@ -99,8 +112,8 @@ export async function POST(req: NextRequest) {
         const data: ApplicationData = await req.json();
 
         // Validate required fields
-        if (!data.displayName || !data.slName || !data.discordUsername || !data.role) {
-            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        if (!data.slDisplayName || !data.agentName || !data.slUuid || !data.role || data.usesVoice === undefined) {
+            return NextResponse.json({ error: 'Missing required fields (SL Display Name, Agent Name, UUID, Role, Voice)' }, { status: 400 });
         }
 
         // Send to Discord

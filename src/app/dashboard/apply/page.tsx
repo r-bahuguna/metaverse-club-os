@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Headphones, Mic, Send, Check, Loader2, Music, Clock, Globe, Sparkles, FileText, Link, ArrowRight } from 'lucide-react';
+import { Headphones, Mic, Send, Check, Loader2, Music, Globe, Sparkles, FileText, Link, ArrowRight, Volume2, VolumeX } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
 
 type RoleChoice = 'dj' | 'host' | 'both';
@@ -16,8 +16,10 @@ const ROLE_OPTIONS: { value: RoleChoice; label: string; icon: React.ReactNode; d
 export default function ApplyPage() {
     const [step, setStep] = useState<Step>(1);
     const [role, setRole] = useState<RoleChoice | null>(null);
-    const [displayName, setDisplayName] = useState('');
-    const [slName, setSlName] = useState('');
+    const [slDisplayName, setSlDisplayName] = useState('');
+    const [agentName, setAgentName] = useState('');
+    const [slUuid, setSlUuid] = useState('');
+    const [usesVoice, setUsesVoice] = useState<boolean | null>(null);
     const [discordUsername, setDiscordUsername] = useState('');
     const [experience, setExperience] = useState('');
     const [genres, setGenres] = useState('');
@@ -31,7 +33,7 @@ export default function ApplyPage() {
 
     const canAdvance = (s: Step) => {
         if (s === 1) return !!role;
-        if (s === 2) return !!displayName && !!slName && !!discordUsername;
+        if (s === 2) return !!slDisplayName && !!agentName && !!slUuid && usesVoice !== null;
         if (s === 3) return true;
         return true;
     };
@@ -44,7 +46,7 @@ export default function ApplyPage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    displayName, slName, discordUsername, role,
+                    slDisplayName, agentName, slUuid, usesVoice, discordUsername, role,
                     experience, genres, availability, timezone, aboutYou, sampleLink,
                 }),
             });
@@ -92,15 +94,15 @@ export default function ApplyPage() {
                     fontFamily: 'var(--font-display)',
                 }}>Application Submitted!</h1>
                 <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 400, lineHeight: 1.6 }}>
-                    Your application has been sent to our team. We'll review it and reach out
-                    via Discord. Keep an eye on your DMs!
+                    Your application has been sent to our team. We&apos;ll review it and reach out
+                    via Discord or in-world. Keep an eye out!
                 </p>
                 <div style={{
                     marginTop: 8, padding: '12px 20px', borderRadius: 12,
                     background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.15)',
                     color: 'var(--neon-cyan)', fontSize: 13, fontFamily: 'var(--font-mono)',
                 }}>
-                    📨 Sent to our Discord review channel
+                    📨 Sent to our review channel
                 </div>
             </div>
         );
@@ -184,46 +186,63 @@ export default function ApplyPage() {
                         Tell us about yourself
                     </div>
                     <div>
-                        <label style={labelStyle}>Display Name <span style={{ color: '#ef4444' }}>*</span></label>
-                        <input value={displayName} onChange={e => setDisplayName(e.target.value)}
-                            placeholder="How should we call you?" style={inputStyle}
+                        <label style={labelStyle}>SL Display Name <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input value={slDisplayName} onChange={e => setSlDisplayName(e.target.value)}
+                            placeholder="Your Second Life display name" style={inputStyle}
                             onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
                             onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
                         />
                     </div>
                     <div>
-                        <label style={labelStyle}>Second Life Name <span style={{ color: '#ef4444' }}>*</span></label>
-                        <input value={slName} onChange={e => setSlName(e.target.value)}
+                        <label style={labelStyle}>Agent Name <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input value={agentName} onChange={e => setAgentName(e.target.value)}
                             placeholder="e.g. Nova Resident" style={inputStyle}
                             onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
                             onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
                         />
                     </div>
                     <div>
-                        <label style={labelStyle}>Discord Username <span style={{ color: '#ef4444' }}>*</span></label>
+                        <label style={labelStyle}>SL UUID <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input value={slUuid} onChange={e => setSlUuid(e.target.value)}
+                            placeholder="e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890" style={inputStyle}
+                            onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
+                            onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
+                        />
+                    </div>
+
+                    {/* Voice toggle */}
+                    <div>
+                        <label style={labelStyle}>Do you use Voice? <span style={{ color: '#ef4444' }}>*</span></label>
+                        <div style={{ display: 'flex', gap: 10 }}>
+                            {[
+                                { val: true, label: 'Yes', icon: <Volume2 size={18} />, color: '#4ade80' },
+                                { val: false, label: 'No', icon: <VolumeX size={18} />, color: '#fbbf24' },
+                            ].map(opt => {
+                                const selected = usesVoice === opt.val;
+                                return (
+                                    <button key={opt.label} onClick={() => setUsesVoice(opt.val)} style={{
+                                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                        padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
+                                        background: selected ? `${opt.color}10` : 'rgba(255,255,255,0.02)',
+                                        border: `2px solid ${selected ? opt.color : 'rgba(255,255,255,0.06)'}`,
+                                        color: selected ? opt.color : 'var(--text-muted)',
+                                        fontWeight: selected ? 700 : 400, fontSize: 14,
+                                        transition: 'all 0.2s ease',
+                                    }}>
+                                        {opt.icon} {opt.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label style={labelStyle}>Discord Username <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: '0' }}>(optional)</span></label>
                         <input value={discordUsername} onChange={e => setDiscordUsername(e.target.value)}
                             placeholder="e.g. djnova or DJ Nova#1234" style={inputStyle}
                             onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
                             onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
                         />
-                    </div>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                        <div style={{ flex: 1 }}>
-                            <label style={labelStyle}><Globe size={12} /> Timezone</label>
-                            <input value={timezone} onChange={e => setTimezone(e.target.value)}
-                                placeholder="e.g. EST, GMT+5:30" style={inputStyle}
-                                onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
-                                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
-                            />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <label style={labelStyle}><Clock size={12} /> Availability</label>
-                            <input value={availability} onChange={e => setAvailability(e.target.value)}
-                                placeholder="e.g. Weekends, evenings" style={inputStyle}
-                                onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
-                                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
-                            />
-                        </div>
                     </div>
                 </div>
             )}
@@ -233,6 +252,24 @@ export default function ApplyPage() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                     <div style={{ ...labelStyle, justifyContent: 'center', fontSize: 14, marginBottom: 4 }}>
                         Your experience & skills
+                    </div>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={labelStyle}><Globe size={12} /> Timezone</label>
+                            <input value={timezone} onChange={e => setTimezone(e.target.value)}
+                                placeholder="e.g. EST, SLT, GMT+5:30" style={inputStyle}
+                                onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
+                                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
+                            />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={labelStyle}>Availability</label>
+                            <input value={availability} onChange={e => setAvailability(e.target.value)}
+                                placeholder="e.g. Weekends, evenings" style={inputStyle}
+                                onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
+                                onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
+                            />
+                        </div>
                     </div>
                     <div>
                         <label style={labelStyle}><Music size={12} /> {role === 'host' ? 'Hosting' : 'DJ'} Experience</label>
@@ -285,9 +322,11 @@ export default function ApplyPage() {
                         <div style={{ fontSize: 11, textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 10 }}>Review</div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: 13 }}>
                             <div><span style={{ color: 'var(--text-muted)' }}>Role:</span> <strong style={{ color: ROLE_OPTIONS.find(r => r.value === role)?.color }}>{ROLE_OPTIONS.find(r => r.value === role)?.label}</strong></div>
-                            <div><span style={{ color: 'var(--text-muted)' }}>Name:</span> <strong>{displayName}</strong></div>
-                            <div><span style={{ color: 'var(--text-muted)' }}>SL:</span> <strong>{slName}</strong></div>
-                            <div><span style={{ color: 'var(--text-muted)' }}>Discord:</span> <strong>{discordUsername}</strong></div>
+                            <div><span style={{ color: 'var(--text-muted)' }}>Voice:</span> <strong style={{ color: usesVoice ? '#4ade80' : '#fbbf24' }}>{usesVoice ? 'Yes' : 'No'}</strong></div>
+                            <div><span style={{ color: 'var(--text-muted)' }}>SL Name:</span> <strong>{slDisplayName}</strong></div>
+                            <div><span style={{ color: 'var(--text-muted)' }}>Agent:</span> <strong>{agentName}</strong></div>
+                            <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)' }}>UUID:</span> <strong style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{slUuid}</strong></div>
+                            {discordUsername && <div><span style={{ color: 'var(--text-muted)' }}>Discord:</span> {discordUsername}</div>}
                             {timezone && <div><span style={{ color: 'var(--text-muted)' }}>TZ:</span> {timezone}</div>}
                             {availability && <div><span style={{ color: 'var(--text-muted)' }}>Avail:</span> {availability}</div>}
                             {genres && <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)' }}>Genres:</span> {genres}</div>}
