@@ -130,6 +130,14 @@ export const NAV_ITEMS: NavItem[] = [
         neonColor: '#94a3b8',   // slate
         requiredRoles: ['super_admin', 'owner'],
     },
+    {
+        id: 'apply',
+        label: 'Apply',
+        href: '/dashboard/apply',
+        icon: 'Zap',
+        neonColor: '#4ade80',   // green
+        requiredRoles: ['super_admin', 'owner', 'general_manager', 'manager', 'dj', 'host', 'vip_member', 'member'],
+    },
 ];
 
 /** Role hierarchy — higher index = more privileges */

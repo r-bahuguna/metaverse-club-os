@@ -34,6 +34,7 @@ const iconMap: Record<string, React.ReactNode> = {
     PartyPopper: <PartyPopper size={20} />,
     Settings: <Settings size={20} />,
     ScrollText: <ScrollText size={20} />,
+    Zap: <Zap size={20} />,
 };
 
 /* Neon Discord logo SVG */

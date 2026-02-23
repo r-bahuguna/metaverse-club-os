@@ -91,7 +91,12 @@ export default function EditStaffModal({ open, onClose, onUpdated, staff }: Edit
             if (!res.ok) throw new Error(data.error || 'Failed to update');
 
             setState('success');
-            logAction({ action: 'staff_updated', actorId: appUser?.uid || '', actorName: appUser?.displayName || '', targetId: staff.uid, targetName: displayName, details: `Updated profile for "${displayName}"` });
+            const changes: string[] = [];
+            if (staff.displayName !== displayName) changes.push(`name: "${staff.displayName}" → "${displayName}"`);
+            if (staff.slName !== slName) changes.push(`SL: "${staff.slName || 'none'}" → "${slName || 'none'}"`);
+            if (staff.discordUsername !== discordUsername) changes.push(`Discord: "${staff.discordUsername || 'none'}" → "${discordUsername || 'none'}"`);
+            if (!targetIsProtected && staff.role !== role) changes.push(`role: ${staff.role} → ${role}`);
+            logAction({ action: 'staff_updated', actorId: appUser?.uid || '', actorName: appUser?.displayName || '', targetId: staff.uid, targetName: displayName, details: changes.length > 0 ? changes.join(' | ') : 'Profile saved (no visible changes)' });
             onUpdated();
             setTimeout(() => onClose(), 800);
         } catch (err: unknown) {
@@ -113,7 +118,7 @@ export default function EditStaffModal({ open, onClose, onUpdated, staff }: Edit
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed to deactivate');
-            logAction({ action: 'staff_updated', actorId: appUser?.uid || '', actorName: appUser?.displayName || '', targetId: staff.uid, targetName: staff.displayName, details: `Deactivated staff "${staff.displayName}"` });
+            logAction({ action: 'staff_deactivated', actorId: appUser?.uid || '', actorName: appUser?.displayName || '', targetId: staff.uid, targetName: staff.displayName, details: `Deactivated staff "${staff.displayName}" (${ROLE_CONFIG[staff.role]?.label || staff.role})` });
             setState('success');
             onUpdated();
             setTimeout(() => onClose(), 800);

@@ -6,6 +6,7 @@ import Modal from './Modal';
 import { useAuth } from '@/hooks/useAuth';
 import { UserRole } from '@/lib/types';
 import { ROLE_CONFIG } from '@/lib/constants';
+import { logAction } from '@/lib/audit';
 
 interface AddStaffModalProps {
     open: boolean;
@@ -82,6 +83,10 @@ export default function AddStaffModal({ open, onClose, onCreated }: AddStaffModa
 
             setTempPassword(data.tempPassword);
             setState('success');
+            logAction({
+                action: 'staff_created', actorId: firebaseUser?.uid || '', actorName: 'Manager',
+                targetName: displayName, details: `Created staff "${displayName}" as ${ROLE_CONFIG[role]?.label || role}${secondaryRoles.length ? ` (+${secondaryRoles.map(r => ROLE_CONFIG[r]?.label || r).join(', ')})` : ''}`,
+            });
             onCreated();
         } catch (err: unknown) {
             setErrMsg(err instanceof Error ? err.message : 'Failed to create user');

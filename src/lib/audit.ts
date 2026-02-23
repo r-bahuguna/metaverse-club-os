@@ -12,6 +12,7 @@ export type AuditAction =
     | 'event_deleted'
     | 'staff_created'
     | 'staff_updated'
+    | 'staff_deactivated'
     | 'roster_posted'
     | 'schedule_assigned'
     | 'availability_set'

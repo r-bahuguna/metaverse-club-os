@@ -534,7 +534,14 @@ export default function SchedulePage() {
             createdAt: new Date().toISOString(),
         });
         console.log('[Schedule] Created event:', docRef.id);
-        // Re-fetch to ensure consistency
+        const isEvent = data.type === 'event';
+        const assignees = [data.djName && `DJ: ${data.djName}`, data.hostName && `Host: ${data.hostName}`].filter(Boolean).join(', ');
+        logAction({
+            action: 'event_created',
+            actorId: appUser.uid, actorName: appUser.displayName,
+            targetId: docRef.id, targetName: data.name || 'Untitled',
+            details: `${isEvent ? 'Event' : 'Schedule'} created for ${data.date} ${data.startTime}–${data.endTime}${assignees ? ` | ${assignees}` : ''}${data.genre ? ` | Genre: ${data.genre}` : ''}`,
+        });
         await fetchData();
     };
 
@@ -545,12 +552,26 @@ export default function SchedulePage() {
         if (message) updates[msgField] = message;
 
         await updateDoc(doc(db, 'events', eventId), updates);
+        const event = events.find(e => e.id === eventId);
+        logAction({
+            action: 'schedule_assigned',
+            actorId: appUser?.uid || '', actorName: appUser?.displayName || 'Unknown',
+            targetId: eventId, targetName: event?.name || 'Event',
+            details: `${role.toUpperCase()} ${response} shift on ${event?.date || 'unknown date'}${message ? ` — "${message}"` : ''}`,
+        });
         setEvents(prev => prev.map(s => s.id === eventId ? { ...s, ...updates } : s));
         setSelectedEvent(prev => prev && prev.id === eventId ? { ...prev, ...updates } : prev);
     };
 
     const handleDelete = async (eventId: string) => {
+        const event = events.find(e => e.id === eventId);
         await deleteDoc(doc(db, 'events', eventId));
+        logAction({
+            action: 'event_deleted',
+            actorId: appUser?.uid || '', actorName: appUser?.displayName || 'Unknown',
+            targetId: eventId, targetName: event?.name || 'Event',
+            details: `Deleted "${event?.name || 'Untitled'}" (${event?.date || 'unknown'} ${event?.startTime || ''}–${event?.endTime || ''})${event?.djName ? ` | DJ: ${event.djName}` : ''}${event?.hostName ? ` | Host: ${event.hostName}` : ''}`,
+        });
         setEvents(prev => prev.filter(s => s.id !== eventId));
     };
 
@@ -613,7 +634,10 @@ export default function SchedulePage() {
                                     const weekDate = currentWeek.toISOString().split('T')[0];
                                     const res = await fetch('/api/schedule/roster', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekDate }) });
                                     const data = await res.json();
-                                    if (res.ok) setActionMsg({ type: 'success', text: `Roster posted! (${data.eventsCount} events)` });
+                                    if (res.ok) {
+                                        setActionMsg({ type: 'success', text: `Roster posted! (${data.eventsCount} events)` });
+                                        logAction({ action: 'roster_posted', actorId: appUser?.uid || '', actorName: appUser?.displayName || 'Unknown', details: `Posted roster for week of ${weekDate} (${data.eventsCount} events)` });
+                                    }
                                     else setActionMsg({ type: 'error', text: data.error || 'Failed to post roster' });
                                 } catch { setActionMsg({ type: 'error', text: 'Network error posting roster' }); }
                                 finally { setPostingRoster(false); setTimeout(() => setActionMsg(null), 4000); }

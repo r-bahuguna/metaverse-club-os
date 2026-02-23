@@ -14,6 +14,7 @@ const ACTION_CONFIG: Record<AuditAction, { label: string; icon: React.ReactNode;
     event_deleted: { label: 'Event Deleted', icon: <Trash2 size={14} />, color: '#ef4444' },
     staff_created: { label: 'Staff Created', icon: <User size={14} />, color: '#4ade80' },
     staff_updated: { label: 'Staff Updated', icon: <Pencil size={14} />, color: '#00f0ff' },
+    staff_deactivated: { label: 'Staff Deactivated', icon: <Shield size={14} />, color: '#ef4444' },
     roster_posted: { label: 'Roster Posted', icon: <Send size={14} />, color: '#c084fc' },
     schedule_assigned: { label: 'Schedule Assigned', icon: <CalendarDays size={14} />, color: '#c084fc' },
     availability_set: { label: 'Availability Set', icon: <Clock size={14} />, color: '#fbbf24' },

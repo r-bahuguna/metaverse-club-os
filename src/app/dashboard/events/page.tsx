@@ -9,6 +9,7 @@ import { useRole } from '@/hooks/useRole';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { ClubEvent, AppUser } from '@/lib/types';
+import { logAction } from '@/lib/audit';
 
 function formatDate(dateStr: string): string {
     return new Date(dateStr + 'T00:00:00').toLocaleDateString('en', {
@@ -89,7 +90,26 @@ export default function EventsPage() {
                         <p style={{ color: 'var(--text-muted)' }}>No events scheduled yet.</p>
                     ) : (
                         events.map(event => (
-                            <GlassCard key={event.id} neon="purple" interactive>
+                            <GlassCard key={event.id} neon="purple" interactive style={event.imageUrl ? {
+                                boxShadow: '0 0 20px rgba(192,132,252,0.15), 0 0 40px rgba(0,240,255,0.08)',
+                                border: '1px solid rgba(192,132,252,0.25)',
+                            } : undefined}>
+                                {/* Event Image Banner */}
+                                {event.imageUrl && (
+                                    <div style={{
+                                        width: 'calc(100% + 48px)', margin: '-24px -24px 16px -24px',
+                                        height: 160, borderRadius: '12px 12px 0 0', overflow: 'hidden',
+                                        position: 'relative',
+                                    }}>
+                                        <img src={event.imageUrl} alt={event.name} style={{
+                                            width: '100%', height: '100%', objectFit: 'cover',
+                                        }} />
+                                        <div style={{
+                                            position: 'absolute', bottom: 0, left: 0, right: 0, height: '60%',
+                                            background: 'linear-gradient(to top, rgba(10,10,15,0.95), transparent)',
+                                        }} />
+                                    </div>
+                                )}
                                 <div style={{ marginBottom: 16 }}>
                                     <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                                         {event.name}
@@ -152,7 +172,7 @@ export default function EventsPage() {
                                             {can('manager') && (
                                                 <div style={{ display: 'flex', gap: 6 }}>
                                                     <button onClick={(e) => { e.stopPropagation(); setEditingEvent(event); setIsAddModalOpen(true); }} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid var(--glass-border)', color: 'white', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>Edit</button>
-                                                    <button onClick={async (e) => { e.stopPropagation(); if (confirm('Delete event?')) { await deleteDoc(doc(db, 'events', event.id)); fetchData(); } }} style={{ background: 'rgba(255,0,60,0.1)', border: '1px solid rgba(255,0,60,0.2)', color: '#ff6b6b', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>Delete</button>
+                                                    <button onClick={async (e) => { e.stopPropagation(); if (confirm('Delete event?')) { const ev = event; await deleteDoc(doc(db, 'events', event.id)); logAction({ action: 'event_deleted', actorId: '', actorName: 'Manager', targetId: ev.id, targetName: ev.name, details: `Deleted event "${ev.name}" (${ev.date} ${ev.startTime}–${ev.endTime})${ev.djName ? ` | DJ: ${ev.djName}` : ''}${ev.hostName ? ` | Host: ${ev.hostName}` : ''}` }); fetchData(); } }} style={{ background: 'rgba(255,0,60,0.1)', border: '1px solid rgba(255,0,60,0.2)', color: '#ff6b6b', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>Delete</button>
                                                 </div>
                                             )}
                                         </div>

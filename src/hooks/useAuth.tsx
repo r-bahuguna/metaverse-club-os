@@ -12,6 +12,7 @@ import {
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { AppUser, UserRole } from '@/lib/types';
+import { logAction } from '@/lib/audit';
 
 /* ── Types ── */
 interface AuthContextValue {
@@ -165,6 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (cred.user) {
                 const profile = await fetchAppUser(cred.user.uid);
                 setAppUser(profile);
+                logAction({ action: 'login', actorId: cred.user.uid, actorName: profile?.displayName || email, details: `Logged in (${profile?.role || 'unknown role'})` });
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Sign-in failed';
@@ -189,6 +191,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             if (firebaseUser && !firebaseUser.isAnonymous) {
                 await setPresence(firebaseUser.uid, 'offline');
+                logAction({ action: 'logout', actorId: firebaseUser.uid, actorName: appUser?.displayName || 'Unknown', details: 'Logged out' });
             }
             await firebaseSignOut(auth);
             setAppUser(null);

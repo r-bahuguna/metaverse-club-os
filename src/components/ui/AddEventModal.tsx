@@ -122,10 +122,18 @@ export default function AddEventModal({ open, onClose, onSave, staffList, eventT
 
             if (eventToEdit) {
                 await updateDoc(doc(db, 'events', eventToEdit.id), eventData);
-                logAction({ action: 'event_updated', actorId: appUser.uid, actorName: appUser.displayName, targetId: eventToEdit.id, targetName: String(name), details: `Updated event "${name}"` });
+                const changes: string[] = [];
+                if (eventToEdit.name !== name) changes.push(`name: "${eventToEdit.name}" → "${name}"`);
+                if (eventToEdit.date !== eventData.date) changes.push(`date: ${eventToEdit.date} → ${eventData.date}`);
+                if (eventToEdit.startTime !== eventData.startTime || eventToEdit.endTime !== eventData.endTime) changes.push(`time: ${eventToEdit.startTime}–${eventToEdit.endTime} → ${eventData.startTime}–${eventData.endTime}`);
+                if (eventToEdit.djId !== (djId || '')) changes.push(`DJ: ${eventToEdit.djName || 'none'} → ${staffList.find(s => s.uid === djId)?.displayName || 'none'}`);
+                if (eventToEdit.hostId !== (hostId || '')) changes.push(`Host: ${eventToEdit.hostName || 'none'} → ${staffList.find(s => s.uid === hostId)?.displayName || 'none'}`);
+                if (eventToEdit.genre !== (genre || undefined)) changes.push(`genre: ${eventToEdit.genre || 'none'} → ${genre || 'none'}`);
+                logAction({ action: 'event_updated', actorId: appUser.uid, actorName: appUser.displayName, targetId: eventToEdit.id, targetName: String(name), details: changes.length > 0 ? changes.join(' | ') : 'Minor update (no field changes detected)' });
             } else {
                 const docRef = await addDoc(collection(db, 'events'), eventData);
-                logAction({ action: 'event_created', actorId: appUser.uid, actorName: appUser.displayName, targetId: docRef.id, targetName: String(name), details: `Created event "${name}" on ${eventData.date}` });
+                const assignees = [djId && `DJ: ${staffList.find(s => s.uid === djId)?.displayName}`, hostId && `Host: ${staffList.find(s => s.uid === hostId)?.displayName}`].filter(Boolean).join(', ');
+                logAction({ action: 'event_created', actorId: appUser.uid, actorName: appUser.displayName, targetId: docRef.id, targetName: String(name), details: `Created event "${name}" on ${eventData.date} ${eventData.startTime}–${eventData.endTime}${assignees ? ` | ${assignees}` : ''}${genre ? ` | Genre: ${genre}` : ''}` });
             }
 
             // Create Shifts if requested (and not editing)
