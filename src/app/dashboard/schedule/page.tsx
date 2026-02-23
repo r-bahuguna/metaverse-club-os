@@ -134,22 +134,21 @@ function EventDetailModal({
     onRespond: (eventId: string, role: 'dj' | 'host', response: string, message?: string) => Promise<void>;
     onDelete: (eventId: string) => Promise<void>;
 }) {
-    const [responseMsg, setResponseMsg] = useState('');
-    const [responding, setResponding] = useState(false);
+    const [responseMsgs, setResponseMsgs] = useState<Record<string, string>>({});
+    const [respondingRole, setRespondingRole] = useState<string | null>(null);
 
     if (!event) return null;
 
-    const isDj = event.djId === currentUserId;
-    const isHost = event.hostId === currentUserId;
-    const myRole = isDj ? 'dj' as const : isHost ? 'host' as const : null;
-    const myResponse = isDj ? event.djResponse : isHost ? event.hostResponse : null;
+    const myRoles: Array<{ role: 'dj' | 'host', response: string | null }> = [];
+    if (event.djId === currentUserId) myRoles.push({ role: 'dj', response: event.djResponse || 'pending' });
+    if (event.hostId === currentUserId) myRoles.push({ role: 'host', response: event.hostResponse || 'pending' });
 
-    async function handleRespond(resp: string) {
-        if (!myRole || !event) return;
-        setResponding(true);
-        await onRespond(event.id, myRole, resp, responseMsg || undefined);
-        setResponseMsg('');
-        setResponding(false);
+    async function handleRespond(role: 'dj' | 'host', resp: string) {
+        if (!event) return;
+        setRespondingRole(role);
+        await onRespond(event.id, role, resp, responseMsgs[role] || undefined);
+        setResponseMsgs(p => ({ ...p, [role]: '' }));
+        setRespondingRole(null);
     }
 
     return (
@@ -233,73 +232,85 @@ function EventDetailModal({
                     )}
                 </div>
 
-                {/* Response area for assigned staff — pending */}
-                {myRole && myResponse === 'pending' && (
-                    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Your Response</div>
-                        <textarea value={responseMsg} onChange={e => setResponseMsg(e.target.value)} placeholder="Optional message..." style={{ width: '100%', padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', minHeight: 60, resize: 'vertical' }} />
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={() => handleRespond('accepted')} disabled={responding} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                <Check size={16} /> Accept
-                            </button>
-                            <button onClick={() => handleRespond('declined')} disabled={responding} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                <XCircle size={16} /> Decline
-                            </button>
-                            <button onClick={() => handleRespond('reschedule_requested')} disabled={responding} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', color: '#fbbf24', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                                <MessageSquare size={16} /> Modify
-                            </button>
-                        </div>
-                    </div>
-                )}
+                {/* Response areas for assigned staff */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {myRoles.map(({ role, response }) => (
+                        <React.Fragment key={role}>
+                            {/* Pending shift */}
+                            {response === 'pending' && (
+                                <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Your {role} Response</div>
+                                    <textarea
+                                        value={responseMsgs[role] || ''}
+                                        onChange={e => setResponseMsgs(p => ({ ...p, [role]: e.target.value }))}
+                                        placeholder="Optional message..."
+                                        style={{ width: '100%', padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', minHeight: 60, resize: 'vertical' }}
+                                    />
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button onClick={() => handleRespond(role, 'accepted')} disabled={respondingRole === role} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                            <Check size={16} /> Accept
+                                        </button>
+                                        <button onClick={() => handleRespond(role, 'declined')} disabled={respondingRole === role} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                            <XCircle size={16} /> Decline
+                                        </button>
+                                        <button onClick={() => handleRespond(role, 'reschedule_requested')} disabled={respondingRole === role} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', color: '#fbbf24', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                            <MessageSquare size={16} /> Modify
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
-                {/* Cancel shift — for accepted/reschedule_requested shifts */}
-                {myRole && (myResponse === 'accepted' || myResponse === 'reschedule_requested') && (
-                    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.12)', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <AlertTriangle size={14} color="#ef4444" />
-                            <div style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Cancel or Modify Your Shift</div>
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                            A mandatory reason is required. Managers will be notified immediately to re-roster.
-                        </div>
-                        <textarea
-                            value={responseMsg}
-                            onChange={e => setResponseMsg(e.target.value)}
-                            placeholder="Reason for cancellation / modification request (required)..."
-                            style={{ width: '100%', padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(239,68,68,0.15)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', minHeight: 70, resize: 'vertical' }}
-                        />
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <button
-                                onClick={() => { if (!responseMsg.trim()) { alert('Please provide a reason for cancellation.'); return; } handleRespond('cancelled'); }}
-                                disabled={responding || !responseMsg.trim()}
-                                style={{
-                                    flex: 1, padding: 10, borderRadius: 10,
-                                    background: responseMsg.trim() ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
-                                    border: `1px solid ${responseMsg.trim() ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)'}`,
-                                    color: responseMsg.trim() ? '#ef4444' : 'var(--text-muted)',
-                                    fontWeight: 600, fontSize: 13, cursor: responseMsg.trim() ? 'pointer' : 'not-allowed',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                                }}
-                            >
-                                <XCircle size={16} /> Cancel Shift
-                            </button>
-                            <button
-                                onClick={() => { if (!responseMsg.trim()) { alert('Please provide details for your modification request.'); return; } handleRespond('reschedule_requested'); }}
-                                disabled={responding || !responseMsg.trim()}
-                                style={{
-                                    flex: 1, padding: 10, borderRadius: 10,
-                                    background: responseMsg.trim() ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.03)',
-                                    border: `1px solid ${responseMsg.trim() ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.06)'}`,
-                                    color: responseMsg.trim() ? '#fbbf24' : 'var(--text-muted)',
-                                    fontWeight: 600, fontSize: 13, cursor: responseMsg.trim() ? 'pointer' : 'not-allowed',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                                }}
-                            >
-                                <MessageSquare size={16} /> Request Mod
-                            </button>
-                        </div>
-                    </div>
-                )}
+                            {/* Accepted / Modify Request: Cancel Shift */}
+                            {(response === 'accepted' || response === 'reschedule_requested') && (
+                                <div style={{ padding: 16, borderRadius: 12, background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.12)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <AlertTriangle size={14} color="#ef4444" />
+                                        <div style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Cancel or Modify Your {role} Shift</div>
+                                    </div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                        A mandatory reason is required. Managers will be notified immediately to re-roster.
+                                    </div>
+                                    <textarea
+                                        value={responseMsgs[role] || ''}
+                                        onChange={e => setResponseMsgs(p => ({ ...p, [role]: e.target.value }))}
+                                        placeholder="Reason for cancellation / modification request (required)..."
+                                        style={{ width: '100%', padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(239,68,68,0.15)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', minHeight: 70, resize: 'vertical' }}
+                                    />
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button
+                                            onClick={() => { const msg = responseMsgs[role] || ''; if (!msg.trim()) { alert('Please provide a reason for cancellation.'); return; } handleRespond(role, 'cancelled'); }}
+                                            disabled={respondingRole === role || !(responseMsgs[role] || '').trim()}
+                                            style={{
+                                                flex: 1, padding: 10, borderRadius: 10,
+                                                background: (responseMsgs[role] || '').trim() ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
+                                                border: `1px solid ${(responseMsgs[role] || '').trim() ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                                color: (responseMsgs[role] || '').trim() ? '#ef4444' : 'var(--text-muted)',
+                                                fontWeight: 600, fontSize: 13, cursor: (responseMsgs[role] || '').trim() ? 'pointer' : 'not-allowed',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                            }}
+                                        >
+                                            <XCircle size={16} /> Cancel Shift
+                                        </button>
+                                        <button
+                                            onClick={() => { const msg = responseMsgs[role] || ''; if (!msg.trim()) { alert('Please provide details for your modification request.'); return; } handleRespond(role, 'reschedule_requested'); }}
+                                            disabled={respondingRole === role || !(responseMsgs[role] || '').trim()}
+                                            style={{
+                                                flex: 1, padding: 10, borderRadius: 10,
+                                                background: (responseMsgs[role] || '').trim() ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.03)',
+                                                border: `1px solid ${(responseMsgs[role] || '').trim() ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                                                color: (responseMsgs[role] || '').trim() ? '#fbbf24' : 'var(--text-muted)',
+                                                fontWeight: 600, fontSize: 13, cursor: (responseMsgs[role] || '').trim() ? 'pointer' : 'not-allowed',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                            }}
+                                        >
+                                            <MessageSquare size={16} /> Request Mod
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </React.Fragment>
+                    ))}
+                </div>
 
                 {canManage && (
                     <div style={{ display: 'flex', gap: 8, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 16 }}>
@@ -659,6 +670,30 @@ export default function SchedulePage() {
             targetId: eventId, targetName: event?.name || 'Event',
             details: `Deleted "${event?.name || 'Untitled'}" (${event?.date || 'unknown'} ${event?.startTime || ''}–${event?.endTime || ''})${event?.djName ? ` | DJ: ${event.djName}` : ''}${event?.hostName ? ` | Host: ${event.hostName}` : ''}`,
         });
+
+        // Notify assigned staff about cancellation
+        if (event) {
+            const eventLabel = `${event.name || 'Shift'} on ${event.date} (${event.startTime}–${event.endTime})`;
+            if (event.djId) {
+                createNotification({
+                    userId: event.djId,
+                    type: 'shift_cancelled',
+                    title: `🚨 Shift Cancelled`,
+                    message: `Event deleted by manager: ${eventLabel}`,
+                    eventId,
+                });
+            }
+            if (event.hostId) {
+                createNotification({
+                    userId: event.hostId,
+                    type: 'shift_cancelled',
+                    title: `🚨 Shift Cancelled`,
+                    message: `Event deleted by manager: ${eventLabel}`,
+                    eventId,
+                });
+            }
+        }
+
         setEvents(prev => prev.filter(s => s.id !== eventId));
     };
 
