@@ -12,6 +12,7 @@ import { ClubEvent, AppUser } from '@/lib/types';
 import { ROLE_CONFIG } from '@/lib/constants';
 import { uploadEventImage } from '@/lib/storage';
 import { logAction } from '@/lib/audit';
+import { createNotification, notifyManagers } from '@/lib/notifications';
 import AddEventModal from '@/components/ui/AddEventModal';
 import SetAvailabilityModal from '@/components/ui/SetAvailabilityModal';
 
@@ -232,7 +233,7 @@ function EventDetailModal({
                     )}
                 </div>
 
-                {/* Response area for assigned staff */}
+                {/* Response area for assigned staff — pending */}
                 {myRole && myResponse === 'pending' && (
                     <div style={{ padding: 16, borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 10 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Your Response</div>
@@ -246,6 +247,55 @@ function EventDetailModal({
                             </button>
                             <button onClick={() => handleRespond('reschedule_requested')} disabled={responding} style={{ flex: 1, padding: 10, borderRadius: 10, background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', color: '#fbbf24', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                                 <MessageSquare size={16} /> Modify
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Cancel shift — for accepted/reschedule_requested shifts */}
+                {myRole && (myResponse === 'accepted' || myResponse === 'reschedule_requested') && (
+                    <div style={{ padding: 16, borderRadius: 12, background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.12)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <AlertTriangle size={14} color="#ef4444" />
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#ef4444', textTransform: 'uppercase' }}>Cancel or Modify Your Shift</div>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            A mandatory reason is required. Managers will be notified immediately to re-roster.
+                        </div>
+                        <textarea
+                            value={responseMsg}
+                            onChange={e => setResponseMsg(e.target.value)}
+                            placeholder="Reason for cancellation / modification request (required)..."
+                            style={{ width: '100%', padding: 10, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(239,68,68,0.15)', color: 'var(--text-primary)', fontSize: 13, outline: 'none', minHeight: 70, resize: 'vertical' }}
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button
+                                onClick={() => { if (!responseMsg.trim()) { alert('Please provide a reason for cancellation.'); return; } handleRespond('cancelled'); }}
+                                disabled={responding || !responseMsg.trim()}
+                                style={{
+                                    flex: 1, padding: 10, borderRadius: 10,
+                                    background: responseMsg.trim() ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.03)',
+                                    border: `1px solid ${responseMsg.trim() ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)'}`,
+                                    color: responseMsg.trim() ? '#ef4444' : 'var(--text-muted)',
+                                    fontWeight: 600, fontSize: 13, cursor: responseMsg.trim() ? 'pointer' : 'not-allowed',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                }}
+                            >
+                                <XCircle size={16} /> Cancel Shift
+                            </button>
+                            <button
+                                onClick={() => { if (!responseMsg.trim()) { alert('Please provide details for your modification request.'); return; } handleRespond('reschedule_requested'); }}
+                                disabled={responding || !responseMsg.trim()}
+                                style={{
+                                    flex: 1, padding: 10, borderRadius: 10,
+                                    background: responseMsg.trim() ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.03)',
+                                    border: `1px solid ${responseMsg.trim() ? 'rgba(251,191,36,0.2)' : 'rgba(255,255,255,0.06)'}`,
+                                    color: responseMsg.trim() ? '#fbbf24' : 'var(--text-muted)',
+                                    fontWeight: 600, fontSize: 13, cursor: responseMsg.trim() ? 'pointer' : 'not-allowed',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                }}
+                            >
+                                <MessageSquare size={16} /> Request Mod
                             </button>
                         </div>
                     </div>
@@ -542,6 +592,28 @@ export default function SchedulePage() {
             targetId: docRef.id, targetName: data.name || 'Untitled',
             details: `${isEvent ? 'Event' : 'Schedule'} created for ${data.date} ${data.startTime}–${data.endTime}${assignees ? ` | ${assignees}` : ''}${data.genre ? ` | Genre: ${data.genre}` : ''}`,
         });
+
+        // Notify assigned DJ
+        if (data.djId) {
+            createNotification({
+                userId: data.djId,
+                type: 'shift_assigned',
+                title: `🎧 You've been assigned as DJ`,
+                message: `${data.name || 'Shift'} on ${data.date} (${data.startTime}–${data.endTime})`,
+                eventId: docRef.id,
+            });
+        }
+        // Notify assigned Host
+        if (data.hostId) {
+            createNotification({
+                userId: data.hostId,
+                type: 'shift_assigned',
+                title: `🎤 You've been assigned as Host`,
+                message: `${data.name || 'Shift'} on ${data.date} (${data.startTime}–${data.endTime})`,
+                eventId: docRef.id,
+            });
+        }
+
         await fetchData();
     };
 
@@ -559,6 +631,21 @@ export default function SchedulePage() {
             targetId: eventId, targetName: event?.name || 'Event',
             details: `${role.toUpperCase()} ${response} shift on ${event?.date || 'unknown date'}${message ? ` — "${message}"` : ''}`,
         });
+
+        // Notify managers about staff response
+        const staffName = appUser?.displayName || 'Staff';
+        const eventLabel = `${event?.name || 'Shift'} (${event?.date || ''} ${event?.startTime || ''}–${event?.endTime || ''})`;
+
+        if (response === 'accepted') {
+            notifyManagers('shift_response', `✅ ${staffName} accepted`, `${role.toUpperCase()} accepted ${eventLabel}`, eventId);
+        } else if (response === 'declined') {
+            notifyManagers('shift_response', `⚠️ ${staffName} declined — needs reassignment`, `${role.toUpperCase()} declined ${eventLabel}${message ? `: "${message}"` : ''}`, eventId);
+        } else if (response === 'reschedule_requested') {
+            notifyManagers('shift_response', `🔄 ${staffName} requested modification`, `${role.toUpperCase()} wants changes for ${eventLabel}${message ? `: "${message}"` : ''}`, eventId);
+        } else if (response === 'cancelled') {
+            notifyManagers('shift_cancelled', `🚨 ${staffName} cancelled their shift`, `${role.toUpperCase()} cancelled ${eventLabel} — needs urgent reassignment${message ? `. Reason: "${message}"` : ''}`, eventId);
+        }
+
         setEvents(prev => prev.map(s => s.id === eventId ? { ...s, ...updates } : s));
         setSelectedEvent(prev => prev && prev.id === eventId ? { ...prev, ...updates } : prev);
     };

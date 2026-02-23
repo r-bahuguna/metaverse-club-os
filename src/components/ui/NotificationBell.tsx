@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, X } from 'lucide-react';
+import { Bell, X, CheckCircle } from 'lucide-react';
 import { useNotifications } from '@/hooks/useNotifications';
 
 function timeAgo(dateStr: string): string {
@@ -17,6 +17,7 @@ function timeAgo(dateStr: string): string {
 const TYPE_ICONS: Record<string, string> = {
     shift_assigned: '🎧',
     shift_response: '✅',
+    shift_cancelled: '⚠️',
     schedule_update: '📅',
     roster_posted: '📋',
     availability_reminder: '⏰',
@@ -26,26 +27,38 @@ export default function NotificationBell() {
     const { notifications, unreadCount, markRead, markAllRead, requestPermission, permissionGranted } = useNotifications();
     const [isOpen, setIsOpen] = useState(false);
     const [showBanner, setShowBanner] = useState(false);
+    const [permState, setPermState] = useState<'default' | 'granted' | 'denied'>('default');
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    // Smart permission request: show banner if not granted after 3 seconds
+    // Track actual browser permission state reactively
     useEffect(() => {
+        if (typeof Notification === 'undefined') return;
+        setPermState(Notification.permission as 'default' | 'granted' | 'denied');
+    }, []);
+
+    // Show banner if permission is 'default' after 3 seconds
+    useEffect(() => {
+        if (permState === 'granted' || permState === 'denied') {
+            setShowBanner(false);
+            return;
+        }
         const timer = setTimeout(() => {
-            if (!permissionGranted && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            if (permState === 'default') {
                 setShowBanner(true);
             }
         }, 3000);
         return () => clearTimeout(timer);
-    }, [permissionGranted]);
+    }, [permState]);
 
     // Handle permission click — works on both Chrome and Safari
     const handleEnableNotifications = async () => {
         try {
-            // Safari requires notifications to be requested from a user gesture
             if ('Notification' in window) {
                 const result = await Notification.requestPermission();
+                setPermState(result as 'default' | 'granted' | 'denied');
                 if (result === 'granted') {
                     setShowBanner(false);
+                    requestPermission();
                     // Show a test notification to confirm
                     try {
                         new Notification('🎉 Notifications enabled!', {
@@ -56,19 +69,18 @@ export default function NotificationBell() {
                 } else if (result === 'denied') {
                     setShowBanner(false);
                 }
-                // If 'default', keep banner showing (Safari sometimes needs multiple clicks)
             }
         } catch (err) {
             console.warn('[NotificationBell] Permission request failed:', err);
-            // Fallback for older Safari
             setShowBanner(false);
         }
     };
 
-    // Auto-request on mount (Chrome auto-prompts; Safari needs user gesture)
+    // Auto-sync on mount
     useEffect(() => {
         if ('Notification' in window && Notification.permission === 'granted') {
             requestPermission();
+            setPermState('granted');
         }
     }, [requestPermission]);
 
@@ -80,6 +92,8 @@ export default function NotificationBell() {
         if (isOpen) document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
     }, [isOpen]);
+
+    const isEnabled = permState === 'granted';
 
     return (
         <>
@@ -147,7 +161,14 @@ export default function NotificationBell() {
                         }}>
                             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Notifications</span>
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                {!permissionGranted && (
+                                {/* Permission status indicator */}
+                                {isEnabled ? (
+                                    <span style={{
+                                        fontSize: 10, color: '#4ade80', display: 'flex', alignItems: 'center', gap: 3,
+                                    }}>
+                                        <CheckCircle size={10} /> Alerts on
+                                    </span>
+                                ) : (
                                     <button onClick={handleEnableNotifications} style={{
                                         fontSize: 10, color: '#000', fontWeight: 600,
                                         background: 'var(--neon-cyan)', border: 'none',

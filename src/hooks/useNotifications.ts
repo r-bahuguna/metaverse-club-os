@@ -8,7 +8,7 @@ import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, doc, 
 export interface AppNotification {
     id: string;
     userId: string;
-    type: 'shift_assigned' | 'shift_response' | 'schedule_update' | 'roster_posted' | 'availability_reminder';
+    type: 'shift_assigned' | 'shift_response' | 'shift_cancelled' | 'schedule_update' | 'roster_posted' | 'availability_reminder';
     title: string;
     message: string;
     read: boolean;
