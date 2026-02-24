@@ -389,7 +389,7 @@ function CreateEventModal({
             }
 
             // Auto-generate name if empty (schedule-only entry)
-            const eventName = name.trim() || `Schedule — ${dateStr} ${startTime}`;
+            const eventName = name.trim() || description.trim() || 'Schedule Shift';
 
             await onSave({
                 name: eventName,
