@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Mock Data — Risky Desires OS
+   Mock Data — Metaverse Club OS
    Realistic test data for Phase 1 (pre-SL integration)
    ========================================================================== */
 
@@ -22,7 +22,7 @@ export const MOCK_STAFF: StaffMember[] = [
         lastSeen: '2026-02-11T12:00:00Z',
         hoursThisWeek: 28,
         tipsThisWeek: 0,
-        bio: 'Owner & Founder of Risky Desires',
+        bio: 'Owner & Founder',
     },
     {
         id: 'staff-002',

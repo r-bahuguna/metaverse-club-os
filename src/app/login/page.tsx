@@ -21,13 +21,13 @@ export default function LoginPage() {
     }, [firebaseUser, loading, router]);
 
     /* Resolve username → email.
-       Staff emails are deterministic: slName → lowercase, spaces→dots, @riskydesires.internal
+       Staff emails are deterministic: slName → lowercase, spaces→dots, @mcos.internal
        This matches the format used in /api/create-user (line 60).
        We construct it directly instead of querying Firestore (which would fail
        because the user isn't authenticated yet and security rules require isSignedIn). */
     function resolveEmail(input: string): string {
         if (input.includes('@')) return input; // already an email
-        return `${input.toLowerCase().replace(/\s+/g, '.')}@riskydesires.internal`;
+        return `${input.toLowerCase().replace(/\s+/g, '.')}@mcos.internal`;
     }
 
     async function handleEmailSubmit(e: React.FormEvent) {
@@ -119,14 +119,14 @@ export default function LoginPage() {
                         fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700,
                         color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.02em',
                     }}>
-                        Risky Desires
+                        Metaverse Club OS
                     </h1>
                     <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.28)', marginTop: 4 }}>
                         Command Center
                     </p>
                 </div>
 
-                {/* Anonymous — Risky Addicts Guest */}
+                {/* Anonymous — Guest Access */}
                 <button
                     onClick={handleAnonymous}
                     style={{
@@ -149,7 +149,7 @@ export default function LoginPage() {
                     }}
                 >
                     <Sparkles size={16} />
-                    Enter as Risky Addict
+                    Enter as Guest
                 </button>
 
                 {/* Divider */}

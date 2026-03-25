@@ -89,7 +89,7 @@ export default function OnboardingModal() {
                         fontFamily: 'var(--font-display, system-ui)', fontSize: 20, fontWeight: 700,
                         color: 'rgba(255,255,255,0.92)', letterSpacing: '-0.02em',
                     }}>
-                        Welcome to Risky Desires
+                        Welcome to Metaverse Club OS
                     </h2>
                     <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 6 }}>
                         Hi <strong style={{ color: '#c084fc' }}>{appUser.displayName}</strong> — please set a new password to continue.

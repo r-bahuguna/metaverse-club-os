@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
         }
 
         /* ── Create Firebase Auth user ── */
-        const internalEmail = `${slName.toLowerCase().replace(/\s+/g, '.')}@riskydesires.internal`;
+        const internalEmail = `${slName.toLowerCase().replace(/\s+/g, '.')}@mcos.internal`;
         const tempPassword = generateTempPassword();
 
         const authUser = await adminAuth.createUser({

@@ -1,0 +1,5 @@
+connectorId: "club-connector"
+generate:
+  javascriptSdk:
+    outputDir: "../src/lib/dataconnect-sdk"
+    package: "@risky-desires/dataconnect"

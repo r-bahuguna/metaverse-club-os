@@ -216,7 +216,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                                 >
                                     <NeonDiscordIcon size={22} />
                                     <div className={styles.discordBannerText}>
-                                        <span className={styles.discordBannerTitle}>Risky Desires</span>
+                                        <span className={styles.discordBannerTitle}>Metaverse Club OS</span>
                                         <span className={styles.discordBannerSub}>
                                             {discord ? `${discord.presence_count} online` : 'Join Discord'}
                                         </span>

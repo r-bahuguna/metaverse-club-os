@@ -1,0 +1,156 @@
+# Club Management Mutations — Data Connect
+# These mutations are called from the Next.js API routes
+# to ingest data from SL objects.
+
+# ── Log a tip transaction ──
+mutation LogTip(
+  $clubId: Club_Key!,
+  $sourceUuid: String!,
+  $sourceName: String!,
+  $recipientUuid: String!,
+  $recipientName: String!,
+  $amount: Int!,
+  $category: String!,
+  $jarObjectKey: String!,
+  $region: String
+) @auth(level: NO_ACCESS) {
+  tipTransaction_insert(data: {
+    club: $clubId,
+    sourceUuid: $sourceUuid,
+    sourceName: $sourceName,
+    recipientUuid: $recipientUuid,
+    recipientName: $recipientName,
+    amount: $amount,
+    category: $category,
+    jarObjectKey: $jarObjectKey,
+    region: $region
+  })
+}
+
+# ── Log a visitor event ──
+mutation LogVisitor(
+  $clubId: Club_Key!,
+  $avatarUuid: String!,
+  $avatarName: String!,
+  $eventType: String!,
+  $isNewVisitor: Boolean!,
+  $dwellMinutes: Int,
+  $currentCount: Int,
+  $region: String
+) @auth(level: NO_ACCESS) {
+  visitorLog_insert(data: {
+    club: $clubId,
+    avatarUuid: $avatarUuid,
+    avatarName: $avatarName,
+    eventType: $eventType,
+    isNewVisitor: $isNewVisitor,
+    dwellMinutes: $dwellMinutes,
+    currentCount: $currentCount,
+    region: $region
+  })
+}
+
+# ── Log a DJ session event ──
+mutation LogDjSession(
+  $clubId: Club_Key!,
+  $djUuid: String!,
+  $djName: String!,
+  $streamUrl: String!,
+  $genre: String,
+  $eventType: String!
+) @auth(level: NO_ACCESS) {
+  djSession_insert(data: {
+    club: $clubId,
+    djUuid: $djUuid,
+    djName: $djName,
+    streamUrl: $streamUrl,
+    genre: $genre,
+    eventType: $eventType
+  })
+}
+
+# ── Create a new club ──
+mutation CreateClub(
+  $name: String!,
+  $ownerUuid: String!,
+  $ownerName: String!,
+  $regionName: String,
+  $slUrl: String,
+  $apiSecret: String
+) @auth(level: NO_ACCESS) {
+  club_insert(data: {
+    name: $name,
+    ownerUuid: $ownerUuid,
+    ownerName: $ownerName,
+    regionName: $regionName,
+    slUrl: $slUrl,
+    apiSecret: $apiSecret
+  })
+}
+
+# ── Add staff to a club ──
+mutation AddStaff(
+  $clubId: Club_Key!,
+  $avatarUuid: String!,
+  $avatarName: String!,
+  $displayName: String!,
+  $role: String!
+) @auth(level: NO_ACCESS) {
+  staff_insert(data: {
+    club: $clubId,
+    avatarUuid: $avatarUuid,
+    avatarName: $avatarName,
+    displayName: $displayName,
+    role: $role
+  })
+}
+
+# ── Log an expense ──
+mutation LogExpense(
+  $clubId: Club_Key!,
+  $name: String!,
+  $amount: Int!,
+  $category: String!,
+  $notes: String,
+  $createdByUuid: String!,
+  $date: Date!
+) @auth(level: NO_ACCESS) {
+  expenseRecord_insert(data: {
+    club: $clubId,
+    name: $name,
+    amount: $amount,
+    category: $category,
+    notes: $notes,
+    createdByUuid: $createdByUuid,
+    date: $date
+  })
+}
+
+# ── Upsert daily stats ──
+mutation UpsertDailyStats(
+  $clubId: Club_Key!,
+  $date: Date!,
+  $totalTips: Int!,
+  $tipCount: Int!,
+  $totalVisitors: Int!,
+  $newVisitors: Int!,
+  $peakConcurrent: Int!,
+  $totalDjMinutes: Int!,
+  $totalExpenses: Int!,
+  $topTipper: String,
+  $topDj: String
+) @auth(level: NO_ACCESS) {
+  dailyStats_upsert(data: {
+    club: $clubId,
+    date: $date,
+    totalTips: $totalTips,
+    tipCount: $tipCount,
+    totalVisitors: $totalVisitors,
+    newVisitors: $newVisitors,
+    peakConcurrent: $peakConcurrent,
+    totalDjMinutes: $totalDjMinutes,
+    totalExpenses: $totalExpenses,
+    topTipper: $topTipper,
+    topDj: $topDj
+  })
+}

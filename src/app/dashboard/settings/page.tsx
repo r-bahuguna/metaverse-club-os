@@ -311,7 +311,7 @@ export default function SettingsPage() {
             )}
 
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textAlign: 'center', marginTop: 'var(--space-2)' }}>
-                Risky Desires Command Center v1.0 · Settings apply immediately
+                Metaverse Club OS — Command Center v1.0 · Settings apply immediately
             </p>
         </div>
     );

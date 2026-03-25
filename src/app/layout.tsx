@@ -3,7 +3,7 @@ import './globals.css';
 import { AuthProvider } from '@/hooks/useAuth';
 
 export const metadata: Metadata = {
-  title: 'Risky Desires — Command Center',
+  title: 'Metaverse Club OS — Command Center',
   description: 'Metaverse Club Management System — Built for Second Life',
   icons: {
     icon: '/favicon.ico',

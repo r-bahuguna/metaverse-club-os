@@ -100,7 +100,7 @@ function buildDiscordMessage(data: ApplicationData): object {
                 }] : []),
             ],
             footer: {
-                text: `Risky Desires • ${timestamp}`,
+                text: `Metaverse Club OS • ${timestamp}`,
             },
             timestamp: now.toISOString(),
         }],

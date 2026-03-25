@@ -1,5 +1,5 @@
 /* ==========================================================================
-   TypeScript Interfaces — Risky Desires OS
+   TypeScript Interfaces — Metaverse Club OS
    ========================================================================== */
 
 /** Role hierarchy for access control */
@@ -11,11 +11,13 @@ export type UserRole =
   | 'dj'
   | 'host'
   | 'vip_member'
-  | 'member'; // "Risky Addicts"
+  | 'member'; // Guest / Community member
 
 /** Application user profile (Firestore-backed) */
 export interface AppUser {
   uid: string;
+  orgId: string;            // Organization/club ID this user belongs to
+  orgName?: string;         // Display name of the org (denormalized)
   email: string;
   displayName: string;
   role: UserRole;
@@ -29,6 +31,20 @@ export interface AppUser {
   mustChangePassword?: boolean;
   status?: 'active' | 'deactivated';
   deactivatedAt?: string;
+}
+
+/** Organization / Club profile (Firestore: orgs/{orgId}) */
+export interface Organization {
+  id: string;
+  name: string;               // "Club Neon", "Pulse Nightclub", etc.
+  slug: string;               // URL-safe: "club-neon", "pulse-nightclub"
+  ownerId: string;            // Firebase Auth UID of the org owner
+  ownerSlUuid?: string;       // SL UUID of the owner (for API auth)
+  apiSecret?: string;         // Shared secret for SL→API auth
+  discordGuildId?: string;
+  discordWidgetUrl?: string;
+  maxCapacity: number;
+  createdAt: string;
 }
 
 /** Staff online status */

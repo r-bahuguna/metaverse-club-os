@@ -16,7 +16,7 @@ interface SettingsContextValue extends SettingsData {
 
 type SoundType = 'click' | 'tip' | 'notification' | 'toggle' | 'success';
 
-const STORAGE_KEY = 'risky-desires-settings';
+const STORAGE_KEY = 'mcos-settings';
 
 const DEFAULTS: SettingsData = {
     darkMode: true,

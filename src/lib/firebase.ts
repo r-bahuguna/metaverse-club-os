@@ -4,13 +4,12 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDOUo6sh6R1Qyi0e8EK6Am9hIxjzmF-dQA",
-    authDomain: "risky-desires.firebaseapp.com",
-    projectId: "risky-desires",
-    storageBucket: "risky-desires.firebasestorage.app",
-    messagingSenderId: "137944336308",
-    appId: "1:137944336308:web:5570c9ed4287e8df2d14e1",
-    measurementId: "G-2ZM1MEEWKE",
+    apiKey: "AIzaSyDTN4Fxr0eIK1sjXtcQUSiDtc-g92Vjch0",
+    authDomain: "metaverse-club-os.firebaseapp.com",
+    projectId: "metaverse-club-os",
+    storageBucket: "metaverse-club-os.firebasestorage.app",
+    messagingSenderId: "1072419752297",
+    appId: "1:1072419752297:web:8664575aeb72d8c71e15f8",
 };
 
 // Initialize Firebase (prevent duplicate init in dev hot-reload)

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Audit Log Helper — Risky Desires OS
+   Audit Log Helper — Metaverse Club OS
    Logs every significant action to Firestore `audit_logs` collection.
    ========================================================================== */
 
@@ -36,11 +36,16 @@ export interface AuditLogEntry {
 /**
  * Log an action to the audit_logs collection.
  * Fire-and-forget — errors are swallowed to avoid breaking the main flow.
+ * If orgId is provided, writes to orgs/{orgId}/audit_logs, otherwise flat collection.
  */
-export async function logAction(entry: Omit<AuditLogEntry, 'timestamp'>): Promise<void> {
+export async function logAction(entry: Omit<AuditLogEntry, 'timestamp'>, orgId?: string): Promise<void> {
     try {
-        await addDoc(collection(db, 'audit_logs'), {
+        const path = orgId
+            ? `orgs/${orgId}/audit_logs`
+            : 'audit_logs';
+        await addDoc(collection(db, path), {
             ...entry,
+            ...(orgId ? { orgId } : {}),
             timestamp: serverTimestamp(),
         });
     } catch (err) {

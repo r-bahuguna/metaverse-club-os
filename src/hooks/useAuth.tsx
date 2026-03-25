@@ -59,6 +59,8 @@ async function fetchAppUser(uid: string): Promise<AppUser | null> {
         const data = snap.data();
         return {
             uid,
+            orgId: data.orgId ?? '',
+            orgName: data.orgName ?? '',
             email: data.email ?? '',
             displayName: data.displayName ?? 'Unknown',
             role: (data.role as UserRole) ?? 'member',
@@ -130,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const handleUnload = () => {
             // Use sendBeacon for reliable offline on page close
             try {
-                const url = `https://firestore.googleapis.com/v1/projects/risky-desires/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=onlineStatus&updateMask.fieldPaths=lastSeen`;
+                const url = `https://firestore.googleapis.com/v1/projects/metaverse-club-os/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=onlineStatus&updateMask.fieldPaths=lastSeen`;
                 const body = JSON.stringify({
                     fields: {
                         onlineStatus: { stringValue: 'offline' },
@@ -174,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
-    /* Anonymous sign in (Risky Addicts guest access) */
+    /* Anonymous sign in (Guest access) */
     const signInAnonymously = useCallback(async () => {
         setError(null);
         try {

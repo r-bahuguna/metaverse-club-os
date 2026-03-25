@@ -1,140 +1,112 @@
-rules_version = '2';
+rules_version='2'
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Helper functions
+
+    // ── Helper functions ──
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
-    // Check role in Custom Claims (fast) OR Firestore doc (fallback)
-    function hasRole(role) {
-      return (request.auth.token.role == role) || 
-             (getUserData().role == role);
-    }
-    
-    function isStaff() {
-      return hasRole('super_admin') || hasRole('owner') || hasRole('general_manager') || hasRole('manager') || hasRole('host') || hasRole('dj');
-    }
-    
-    function isManager() {
-      return hasRole('super_admin') || hasRole('owner') || hasRole('general_manager') || hasRole('manager');
+
+    function belongsToOrg(orgId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data != null;
     }
 
-    // --- Collections ---
+    function isOrgAdmin(orgId) {
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+      return member != null && member.role in ['super_admin', 'owner', 'general_manager', 'manager'];
+    }
 
-    // Users: Public read, Write only by Admin SDK (backend) or self (limited updates)
-    match /users/{userId} {
+    function isOrgOwner(orgId) {
+      let member = get(/databases/$(database)/documents/orgs/$(orgId)/members/$(request.auth.uid)).data;
+      return member != null && member.role in ['super_admin', 'owner'];
+    }
+
+    // ── Global user profile ──
+    match /users/{uid} {
       allow read: if isSignedIn();
-      allow create: if false; // Created via API
-      allow delete: if false;
-      // Self can update presence fields
-      allow update: if (request.auth.uid == userId && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['onlineStatus', 'mustChangePassword', 'lastSeen']))
-         // Managers can update any user doc (for edit staff)
-         || (isSignedIn() && isManager());
+      allow write: if isSignedIn() && request.auth.uid == uid;
     }
 
-    // Events (unified: event data + scheduling assignments)
-    match /events/{eventId} {
-      allow read: if true;
-      allow create: if isSignedIn() && isManager();
-      allow delete: if isSignedIn() && isManager();
-      allow update: if isSignedIn() && (
-        isManager() ||
-        // DJ can update their own response/message
-        (resource.data.djId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['djResponse', 'djMessage'])) ||
-        // Host can update their own response/message
-        (resource.data.hostId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostResponse', 'hostMessage']))
-      );
-    }
+    // ── Organization document ──
+    match /orgs/{orgId} {
+      allow read: if belongsToOrg(orgId);
+      allow create: if isSignedIn(); // Anyone can create an org
+      allow update: if isOrgOwner(orgId);
+      allow delete: if false; // No client delete
 
-    // Shifts: Staff read, Manager write, Staff can update response
-    match /shifts/{shiftId} {
-      allow read: if isSignedIn();
-      
-      allow create: if isSignedIn() && isManager();
-      allow delete: if isSignedIn() && isManager();
-      
-      allow update: if isSignedIn() && (
-        isManager() || 
-        // Staff can only update response/notes on their own shifts
-        (resource.data.staffId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['response', 'notes']))
-      );
-    }
+      // ── Org members ──
+      match /members/{uid} {
+        allow read: if belongsToOrg(orgId);
+        allow create, update: if isOrgAdmin(orgId);
+        allow delete: if isOrgOwner(orgId);
+      }
 
-    // Availability: Staff read all, write own
-    match /availability/{availId} {
-      allow read: if isSignedIn() && isStaff();
-      
-      allow create: if isSignedIn() && (
-        isManager() || 
-        (request.resource.data.staffId == request.auth.uid)
-      );
-      
-      allow update: if isSignedIn() && (
-        isManager() || 
-        (resource.data.staffId == request.auth.uid)
-      );
-      
-      allow delete: if isSignedIn() && (
-        isManager() || 
-        (resource.data.staffId == request.auth.uid)
-      );
-    }
+      // ── Real-time tips (written by API routes, read by dashboard) ──
+      match /tips_realtime/{tipId} {
+        allow read: if belongsToOrg(orgId);
+        allow write: if false; // Server-only writes via Admin SDK
+      }
 
-    // Tips: Read own/manager, Create allow
-    match /tips/{tipId} {
-      allow read: if isSignedIn() && (request.auth.uid == resource.data.toUserId || request.auth.uid == resource.data.fromUserId || isManager());
-      // Explicitly allow create for any signed in user
-      allow create: if isSignedIn();
-      allow update, delete: if false; // Tips are immutable records
-    }
+      // ── Live visitors (written by API routes) ──
+      match /visitors_live/{visitorId} {
+        allow read: if belongsToOrg(orgId);
+        allow write: if false;
+      }
 
-    // Event Schedules: Manager CRUD, staff can update their response/message
-    match /eventSchedules/{schedId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isManager();
-      allow delete: if isSignedIn() && isManager();
-      allow update: if isSignedIn() && (
-        isManager() ||
-        // DJ can update their own response/message
-        (resource.data.djId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['djResponse', 'djMessage'])) ||
-        // Host can update their own response/message
-        (resource.data.hostId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostResponse', 'hostMessage']))
-      );
-    }
+      // ── Visitor log (historical) ──
+      match /visitor_log/{logId} {
+        allow read: if belongsToOrg(orgId);
+        allow write: if false;
+      }
 
-    // Password reset requests: Staff create own, Manager read
-    match /password_reset_requests/{reqId} {
-      allow read: if isSignedIn() && isManager();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && isManager();
-    }
+      // ── Active state (DJ, Host) ──
+      match /active_state/{stateId} {
+        allow read: if belongsToOrg(orgId);
+        allow write: if false;
+      }
 
-    // Notifications: User reads own, Manager creates
-    match /notifications/{notifId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isManager());
-    }
+      // ── Stats ──
+      match /stats/{docId} {
+        allow read: if belongsToOrg(orgId);
+        allow write: if false;
+      }
 
-    // Audit Logs: Anyone can create (for logging), Super Admin + Owner read
-    match /audit_logs/{logId} {
-      allow read: if isSignedIn() && (hasRole('super_admin') || hasRole('owner'));
-      allow create: if isSignedIn();
-      allow update, delete: if false;
-    }
+      // ── DJ sessions ──
+      match /dj_sessions/{sessionId} {
+        allow read: if belongsToOrg(orgId);
+        allow write: if false;
+      }
 
-    // Default Deny
-    match /{document=**} {
-      allow read, write: if false;
+      // ── Staff feed ──
+      match /staff_feed/{feedId} {
+        allow read: if belongsToOrg(orgId);
+        allow create: if belongsToOrg(orgId);
+        allow update, delete: if isOrgAdmin(orgId);
+      }
+
+      // ── Audit logs ──
+      match /audit_logs/{logId} {
+        allow read: if isOrgAdmin(orgId);
+        allow create: if belongsToOrg(orgId);
+        allow update, delete: if false;
+      }
+
+      // ── Events ──
+      match /events/{eventId} {
+        allow read: if belongsToOrg(orgId);
+        allow create, update: if isOrgAdmin(orgId);
+        allow delete: if isOrgOwner(orgId);
+      }
+
+      // ── Notifications ──
+      match /notifications/{notifId} {
+        allow read: if belongsToOrg(orgId);
+        allow create: if isOrgAdmin(orgId);
+        allow update: if belongsToOrg(orgId) && request.auth.uid == resource.data.userId;
+        allow delete: if isOrgAdmin(orgId);
+      }
     }
   }
 }

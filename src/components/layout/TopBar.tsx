@@ -3,6 +3,7 @@
 import React from 'react';
 import { Menu } from 'lucide-react';
 import { useRole } from '@/hooks/useRole';
+import { useLiveDashboardStats } from '@/hooks/useLiveData';
 import { MOCK_DASHBOARD_STATS } from '@/lib/mock-data';
 import { UserRole } from '@/lib/types';
 import NotificationBell from '@/components/ui/NotificationBell';
@@ -25,7 +26,8 @@ const DEMO_ROLES: { role: UserRole; label: string }[] = [
 
 export default function TopBar({ title, onMenuClick }: TopBarProps) {
     const { currentRole, switchRole, isSuperAdmin, isGuest, roleLabel } = useRole();
-    const stats = MOCK_DASHBOARD_STATS;
+    const { stats: liveStats } = useLiveDashboardStats();
+    const stats = liveStats.tonightRevenue > 0 ? liveStats : MOCK_DASHBOARD_STATS;
 
     return (
         <header className={styles.topbar}>

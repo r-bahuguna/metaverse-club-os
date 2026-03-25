@@ -1,0 +1,8 @@
+connectorId: example
+generate:
+  javascriptSdk:
+    - outputDir: ../../../../lexoveda/src/dataconnect-generated
+      package: "@dataconnect/generated"
+      packageJsonDir: ../../../../lexoveda
+      react: true
+      angular: false

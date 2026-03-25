@@ -1,0 +1,110 @@
+# Risky Desires OS — PostgreSQL Schema via Firebase Data Connect
+# Financial and analytics data with relational integrity.
+# Real-time operational state stays in Firestore.
+
+# ──────────────────────────────────────
+# Club — Top-level venue entity
+# ──────────────────────────────────────
+type Club @table {
+  name: String!
+  ownerUuid: String!               # SL avatar UUID of club owner
+  ownerName: String!
+  regionName: String
+  slUrl: String
+  apiSecret: String                # Hashed shared secret for SL→API auth
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+# ──────────────────────────────────────
+# Staff — Club staff members (DJs, Hosts, etc.)
+# ──────────────────────────────────────
+type Staff @table(key: ["club", "avatarUuid"]) {
+  club: Club!
+  avatarUuid: String!              # SL avatar UUID
+  avatarName: String!
+  displayName: String!
+  role: String!                    # "dj" | "host" | "dancer" | "manager" | "owner"
+  totalTipsReceived: Int! @default(value: 0)
+  totalSessions: Int! @default(value: 0)
+  joinedAt: Timestamp! @default(expr: "request.time")
+}
+
+# ──────────────────────────────────────
+# TipTransaction — Financial ledger (immutable)
+# Every L$ tip is recorded as a row. Integer amounts only.
+# ──────────────────────────────────────
+type TipTransaction @table {
+  club: Club!
+  sourceUuid: String!              # Tipper's SL avatar UUID
+  sourceName: String!              # Tipper's display name
+  recipientUuid: String!           # Staff member's SL UUID
+  recipientName: String!
+  amount: Int!                     # L$ amount (integer, never float)
+  category: String!                # "club" | "dj" | "host" | "dancer_1" | "dancer_2"
+  jarObjectKey: String!            # SL object UUID of the tip jar
+  region: String
+  verified: Boolean! @default(value: false)
+  timestamp: Timestamp! @default(expr: "request.time")
+}
+
+# ──────────────────────────────────────
+# VisitorLog — Guest arrival/departure tracking
+# ──────────────────────────────────────
+type VisitorLog @table {
+  club: Club!
+  avatarUuid: String!
+  avatarName: String!
+  eventType: String!               # "arrival" | "departure"
+  isNewVisitor: Boolean!
+  dwellMinutes: Int                # Set on departure
+  currentCount: Int                # Visitors present at time of event
+  region: String
+  timestamp: Timestamp! @default(expr: "request.time")
+}
+
+# ──────────────────────────────────────
+# DjSession — DJ streaming session tracking
+# ──────────────────────────────────────
+type DjSession @table {
+  club: Club!
+  djUuid: String!
+  djName: String!
+  streamUrl: String!
+  genre: String
+  eventType: String!               # "login" | "logout" | "track_change"
+  totalTips: Int @default(value: 0)
+  peakListeners: Int @default(value: 0)
+  timestamp: Timestamp! @default(expr: "request.time")
+}
+
+# ──────────────────────────────────────
+# ExpenseRecord — Club expense tracking
+# ──────────────────────────────────────
+type ExpenseRecord @table {
+  club: Club!
+  name: String!
+  amount: Int!                     # L$ amount
+  category: String!                # "sploder" | "fishbowl" | "asset" | "promotion" | "custom"
+  notes: String
+  createdByUuid: String!
+  date: Date!
+  timestamp: Timestamp! @default(expr: "request.time")
+}
+
+# ──────────────────────────────────────
+# DailyStats — Pre-aggregated daily summaries
+# Computed by Cloud Functions, stored for fast dashboard queries
+# ──────────────────────────────────────
+type DailyStats @table(key: ["club", "date"]) {
+  club: Club!
+  date: Date!
+  totalTips: Int! @default(value: 0)
+  tipCount: Int! @default(value: 0)
+  totalVisitors: Int! @default(value: 0)
+  newVisitors: Int! @default(value: 0)
+  peakConcurrent: Int! @default(value: 0)
+  totalDjMinutes: Int! @default(value: 0)
+  totalExpenses: Int! @default(value: 0)
+  topTipper: String
+  topDj: String
+}

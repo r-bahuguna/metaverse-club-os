@@ -31,7 +31,7 @@ function statusEmoji(djResp?: string, hostResp?: string): string {
 function buildRosterMessage(events: any[], weekStart: Date, weekEnd: Date): string {
     const header = [
         '╔══════════════════════════════════════════╗',
-        '║        🎵 RISKY DESIRES ROSTER 🎵       ║',
+        '║        🎵 CLUB ROSTER 🎵                 ║',
         `║     ${formatWeekRange(weekStart, weekEnd).padStart(28).padEnd(36)}║`,
         '╠══════════════════════════════════════════╣',
     ];

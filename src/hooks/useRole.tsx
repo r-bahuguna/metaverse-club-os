@@ -35,7 +35,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         if (isSuperAdmin && overrideRole) return overrideRole;
         // Firestore profile has authority
         if (appUser?.role) return appUser.role;
-        // Anonymous users are members (Risky Addicts)
+        // Anonymous users are members (Guests)
         if (isAnonymous) return 'member';
         // Fallback
         return 'member';

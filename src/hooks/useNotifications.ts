@@ -41,7 +41,7 @@ export function useNotifications() {
                 new Notification(title, {
                     body,
                     icon: '/favicon.ico',
-                    tag: 'risky-desires',
+                    tag: 'mcos',
                 });
             } catch (e) {
                 console.warn('[Notifications] Browser notification failed:', e);

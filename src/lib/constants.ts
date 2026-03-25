@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Constants — Risky Desires OS
+   Constants — Metaverse Club OS
    ========================================================================== */
 
 import { NavItem, RoleConfig, UserRole } from './types';
@@ -64,7 +64,7 @@ export const ROLE_CONFIG: Record<UserRole, RoleConfig> = {
     },
     member: {
         role: 'member',
-        label: 'Risky Addict',
+        label: 'Member',
         shortLabel: 'MBR',
         color: '--text-secondary',
         neonClass: '',
@@ -167,7 +167,7 @@ export const EXPENSE_CATEGORIES = [
 
 /** Brand constants */
 export const BRAND = {
-    name: 'Risky Desires',
+    name: 'Metaverse Club OS',
     tagline: 'Command Center',
     version: '1.0.0-alpha',
 } as const;

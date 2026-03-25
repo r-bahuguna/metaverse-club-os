@@ -1,0 +1,161 @@
+# Club Management Queries — Data Connect
+# Dashboard queries for analytics and reporting.
+
+# ── Get club details ──
+query GetClub($id: Club_Key!) @auth(level: NO_ACCESS) {
+  club(key: $id) {
+    id
+    name
+    ownerUuid
+    ownerName
+    regionName
+    slUrl
+    createdAt
+  }
+}
+
+# ── List clubs by owner ──
+query ListClubsByOwner($ownerUuid: String!) @auth(level: NO_ACCESS) {
+  clubs(where: { ownerUuid: { eq: $ownerUuid } }) {
+    id
+    name
+    ownerName
+    regionName
+    createdAt
+  }
+}
+
+# ── Get recent tips for a club ──
+query GetRecentTips(
+  $clubId: Club_Key!,
+  $limit: Int! = 50
+) @auth(level: NO_ACCESS) {
+  tipTransactions(
+    where: { club: { id: { eq: $clubId } } }
+    orderBy: [{ timestamp: DESC }]
+    limit: $limit
+  ) {
+    id
+    sourceUuid
+    sourceName
+    recipientName
+    amount
+    category
+    timestamp
+  }
+}
+
+# ── Get tips by category for analytics ──
+query GetTipsByCategory(
+  $clubId: Club_Key!
+) @auth(level: NO_ACCESS) {
+  tipTransactions(
+    where: { club: { id: { eq: $clubId } } }
+    orderBy: [{ timestamp: DESC }]
+  ) {
+    amount
+    category
+    recipientName
+    timestamp
+  }
+}
+
+# ── Get visitor logs ──
+query GetRecentVisitors(
+  $clubId: Club_Key!,
+  $limit: Int! = 100
+) @auth(level: NO_ACCESS) {
+  visitorLogs(
+    where: { club: { id: { eq: $clubId } } }
+    orderBy: [{ timestamp: DESC }]
+    limit: $limit
+  ) {
+    avatarUuid
+    avatarName
+    eventType
+    isNewVisitor
+    dwellMinutes
+    currentCount
+    timestamp
+  }
+}
+
+# ── Get DJ sessions ──
+query GetDjSessions(
+  $clubId: Club_Key!,
+  $limit: Int! = 20
+) @auth(level: NO_ACCESS) {
+  djSessions(
+    where: { club: { id: { eq: $clubId } } }
+    orderBy: [{ timestamp: DESC }]
+    limit: $limit
+  ) {
+    djUuid
+    djName
+    streamUrl
+    genre
+    eventType
+    totalTips
+    peakListeners
+    timestamp
+  }
+}
+
+# ── Get daily stats for a date range ──
+query GetDailyStats(
+  $clubId: Club_Key!
+) @auth(level: NO_ACCESS) {
+  dailyStatss(
+    where: { club: { id: { eq: $clubId } } }
+    orderBy: [{ date: DESC }]
+    limit: 30
+  ) {
+    date
+    totalTips
+    tipCount
+    totalVisitors
+    newVisitors
+    peakConcurrent
+    totalDjMinutes
+    totalExpenses
+    topTipper
+    topDj
+  }
+}
+
+# ── Get staff for a club ──
+query GetStaff(
+  $clubId: Club_Key!
+) @auth(level: NO_ACCESS) {
+  staffs(
+    where: { club: { id: { eq: $clubId } } }
+  ) {
+    avatarUuid
+    avatarName
+    displayName
+    role
+    totalTipsReceived
+    totalSessions
+    joinedAt
+  }
+}
+
+# ── Get expenses for a club ──
+query GetExpenses(
+  $clubId: Club_Key!,
+  $limit: Int! = 50
+) @auth(level: NO_ACCESS) {
+  expenseRecords(
+    where: { club: { id: { eq: $clubId } } }
+    orderBy: [{ date: DESC }]
+    limit: $limit
+  ) {
+    id
+    name
+    amount
+    category
+    notes
+    date
+    createdByUuid
+  }
+}

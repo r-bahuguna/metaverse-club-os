@@ -1,5 +1,5 @@
 /* ==========================================================================
-   AI Insights Stub — Risky Desires OS
+   AI Insights Stub — Metaverse Club OS
    Ready for Genkit / Firebase AI Logic integration
    ========================================================================== */
 

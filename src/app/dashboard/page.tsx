@@ -15,6 +15,11 @@ import {
 import GlassCard from '@/components/ui/GlassCard';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { useRole } from '@/hooks/useRole';
+import { useOrg } from '@/hooks/useOrg';
+import {
+    useLiveDashboardStats, useLiveTips, useLiveTipHistory,
+    useLiveDjBooth, useLiveHostStation, useLiveStaffFeed, useLiveGuests,
+} from '@/hooks/useLiveData';
 import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ClubEvent } from '@/lib/types';
@@ -240,9 +245,26 @@ function UpcomingEventsSection() {
 
 export default function DashboardPage() {
     const { can, isGuest } = useRole();
-    const stats = MOCK_DASHBOARD_STATS;
-    const dj = MOCK_DJ_BOOTH;
-    const host = MOCK_HOST_STATION;
+    const { orgId } = useOrg();
+
+    // ── Live Firestore Data (with mock fallback) ──
+    const { stats: liveStats, loading: statsLoading } = useLiveDashboardStats(orgId);
+    const { dj: liveDj, loading: djLoading } = useLiveDjBooth(orgId);
+    const { host: liveHost, loading: hostLoading } = useLiveHostStation(orgId);
+    const { tips: liveTips, loading: tipsLoading } = useLiveTips(orgId, 20);
+    const { history: liveTipHistory, loading: historyLoading } = useLiveTipHistory(orgId);
+    const { feed: liveFeed, loading: feedLoading } = useLiveStaffFeed(orgId, 20);
+    const { guests: liveGuests, loading: guestsLoading } = useLiveGuests(orgId);
+
+    // Use live data if available, otherwise fall back to mock
+    const stats = liveStats.tonightRevenue > 0 ? liveStats : MOCK_DASHBOARD_STATS;
+    const dj = liveDj.djName ? liveDj : MOCK_DJ_BOOTH;
+    const host = liveHost.hostName ? liveHost : MOCK_HOST_STATION;
+    const tips = liveTips.length > 0 ? liveTips : MOCK_TIPS;
+    const tipHistory = liveTipHistory.length > 0 ? liveTipHistory : MOCK_TIP_HISTORY;
+    const staffFeed = liveFeed.length > 0 ? liveFeed : MOCK_STAFF_FEED;
+    const guests = liveGuests.length > 0 ? liveGuests : MOCK_GUEST_VISITS;
+
     const capacityPct = Math.round((stats.currentGuests / stats.maxCapacity) * 100);
     const capacityColor = capacityPct > 85 ? '#ff4444' : capacityPct > 60 ? '#fbbf24' : '#4ade80';
 
@@ -428,7 +450,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
-                            Risky Desires Club
+                            Club Tip Jar
                         </div>
                         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
                             Support the club • Club tip jar: L${stats.tipsClub.toLocaleString()} tonight
@@ -452,7 +474,7 @@ export default function DashboardPage() {
                             </div>
                             <div className={styles.vibeGraphWrapper}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={MOCK_TIP_HISTORY} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
+                                    <AreaChart data={tipHistory} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
                                         <defs>
                                             <linearGradient id="gradCyan" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="0%" stopColor="#00f0ff" stopOpacity={0.3} />
@@ -606,10 +628,10 @@ export default function DashboardPage() {
                         <GlassCard>
                             <div className={styles.sectionHeader}>
                                 <h2 className={styles.sectionTitle}>Guest Activity</h2>
-                                <span className={styles.sectionBadge}>{MOCK_GUEST_VISITS.length}</span>
+                                <span className={styles.sectionBadge}>{guests.length}</span>
                             </div>
                             <div className={styles.guestList}>
-                                {MOCK_GUEST_VISITS.map(g => (
+                                {guests.map(g => (
                                     <div key={g.id} className={styles.guestItem}>
                                         <span className={styles.guestName}>{g.name}</span>
                                         {g.isNewMember && <span className={styles.guestNew}>new</span>}
@@ -631,7 +653,7 @@ export default function DashboardPage() {
                                 <span className={styles.sectionBadge}>live</span>
                             </div>
                             <div className={styles.tipFeed}>
-                                {MOCK_TIPS.map(tip => (
+                                {tips.map(tip => (
                                     <div key={tip.id} className={styles.tipItem}>
                                         <span className={styles.tipAmount}>L${tip.amount.toLocaleString()}</span>
                                         <span>{tip.tipperName} → {tip.recipientName}</span>
@@ -649,10 +671,10 @@ export default function DashboardPage() {
                 <GlassCard>
                     <div className={styles.sectionHeader}>
                         <h2 className={styles.sectionTitle}>Staff Feed</h2>
-                        <span className={styles.sectionBadge}>{MOCK_STAFF_FEED.length}</span>
+                        <span className={styles.sectionBadge}>{staffFeed.length}</span>
                     </div>
                     <div className={styles.staffFeed}>
-                        {MOCK_STAFF_FEED.map(msg => (
+                        {staffFeed.map(msg => (
                             <div key={msg.id} className={styles.feedItem}>
                                 <span className={`${styles.feedBadge} ${msg.type === 'alert' ? styles.feedBadgeAlert :
                                     msg.type === 'message' ? styles.feedBadgeMessage :

@@ -124,7 +124,7 @@ export default function ApplyPage() {
                     Join Our Team
                 </h1>
                 <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 6 }}>
-                    Apply to become a DJ or Host at Risky Desires
+                    Apply to become a DJ or Host
                 </p>
             </div>
 
@@ -310,7 +310,7 @@ export default function ApplyPage() {
                     <div>
                         <label style={labelStyle}><FileText size={12} /> About You (optional)</label>
                         <textarea value={aboutYou} onChange={e => setAboutYou(e.target.value)}
-                            placeholder="Anything else you'd like us to know? What makes you a great fit for Risky Desires?"
+                            placeholder="Anything else you'd like us to know? What makes you a great fit for our club?"
                             rows={3} style={{ ...inputStyle, resize: 'vertical' }}
                             onFocus={e => { e.target.style.borderColor = 'rgba(0,240,255,0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(0,240,255,0.08)'; }}
                             onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.08)'; e.target.style.boxShadow = 'none'; }}
